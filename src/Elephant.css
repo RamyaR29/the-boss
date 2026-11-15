@@ -1,0 +1,100 @@
+.elephant {
+  display: block;
+  overflow: visible;
+  --skin: #b7c7d8;
+  --skin-dark: #9fb3c8;
+  --ear-inner: #f3b6c4;
+  --ink: #2b3440;
+  --accent: #e8743b;
+}
+
+.elephant * {
+  transform-box: fill-box;
+}
+
+.shadow { fill: rgba(0, 0, 0, 0.18); }
+.head { fill: var(--skin); }
+.body { fill: var(--skin-dark); }
+.foot { fill: var(--skin-dark); stroke: var(--skin); stroke-width: 2; }
+.ear-outer { fill: var(--skin-dark); }
+.ear-inner { fill: var(--ear-inner); }
+.cheek { fill: #f29fb3; opacity: 0.6; }
+.pupil { fill: var(--ink); }
+.shine { fill: #fff; }
+.lid { fill: var(--skin); transform-origin: top; }
+.tusk { fill: none; stroke: #fffaf0; stroke-width: 4; stroke-linecap: round; }
+.mouth { fill: #7a3040; transform-origin: center; }
+.trunk { stroke: var(--skin); stroke-width: 14; transform-origin: top center; }
+.think-dots circle { fill: #fff; stroke: var(--ink); stroke-width: 1.5; opacity: 0; }
+.waves path { stroke: var(--accent); stroke-width: 3; opacity: 0; }
+.ear-left { transform-origin: right center; }
+.ear-right { transform-origin: left center; }
+
+/* ---------- idle: gentle bob + blink ---------- */
+.bob { animation: bob 3s ease-in-out infinite; transform-origin: bottom center; }
+.lid { animation: blink 4.5s infinite; }
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes blink {
+  0%, 92%, 100% { height: 0; }
+  95% { height: 14px; }
+}
+
+/* ---------- listening: ears fan out, sound waves ---------- */
+.state-listening .ear-left { animation: ear-left 0.9s ease-in-out infinite; }
+.state-listening .ear-right { animation: ear-right 0.9s ease-in-out infinite; }
+.state-listening .waves path { animation: wave 1.2s ease-out infinite; }
+.state-listening .waves path:nth-child(2) { animation-delay: 0.3s; }
+
+@keyframes ear-left {
+  0%, 100% { transform: scale(1.08) rotate(-4deg); }
+  50% { transform: scale(1.18) rotate(-10deg); }
+}
+@keyframes ear-right {
+  0%, 100% { transform: scale(1.08) rotate(4deg); }
+  50% { transform: scale(1.18) rotate(10deg); }
+}
+@keyframes wave {
+  0% { opacity: 0; }
+  40% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---------- thinking: looks up, thought dots ---------- */
+.state-thinking .pupil,
+.state-thinking .shine { transform: translate(2px, -3px); }
+.state-thinking .bob { animation: tilt 2.4s ease-in-out infinite; }
+.state-thinking .think-dots circle { animation: dot 1.5s ease-in-out infinite; }
+.state-thinking .think-dots circle:nth-child(2) { animation-delay: 0.25s; }
+.state-thinking .think-dots circle:nth-child(3) { animation-delay: 0.5s; }
+
+@keyframes tilt {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+@keyframes dot {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+/* ---------- talking: mouth moves, trunk sways ---------- */
+.state-talking .mouth { animation: talk 0.35s ease-in-out infinite alternate; }
+.state-talking .trunk { animation: sway 0.9s ease-in-out infinite alternate; }
+
+@keyframes talk {
+  from { transform: scaleY(1); }
+  to { transform: scaleY(3.2); }
+}
+@keyframes sway {
+  from { transform: rotate(-6deg); }
+  to { transform: rotate(6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elephant *, .elephant { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
+  .state-listening .waves path,
+  .state-thinking .think-dots circle { opacity: 1; }
+}
