@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ApiKeySettings } from "./ApiKeySettings";
+import type { ChatMessage } from "./chat";
 import { CHARACTER_STATES, type CharacterState } from "./Elephant";
 import {
   mockNeedsYou,
@@ -19,12 +21,23 @@ function guessLanguage(text: string): string {
   return "English";
 }
 
+const dateFmt = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 interface Props {
   state: CharacterState;
   onStateChange: (s: CharacterState) => void;
+  messages: ChatMessage[];
+  pending: boolean;
+  onAsk: (text: string, context: string) => void;
 }
 
-export function TodayPanel({ state, onStateChange }: Props) {
+export function TodayPanel({ state, onStateChange, messages, pending, onAsk }: Props) {
   const [needsYou, setNeedsYou] = useState(mockNeedsYou);
   const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
@@ -49,6 +62,33 @@ export function TodayPanel({ state, onStateChange }: Props) {
   };
 
   const lang = guessLanguage(ask);
+
+  // What The Boss knows about today, sent with each question.
+  const buildContext = () => {
+    const lines = [`Now: ${dateFmt.format(new Date())}`, "", "Today:"];
+    for (const t of today) {
+      lines.push(
+        `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} · ${t.title}${t.done ? " (done)" : ""}`,
+      );
+    }
+    if (needsYou.length) {
+      lines.push("", "Waiting on the user:");
+      for (const n of needsYou) lines.push(`- ${n.text}`);
+    }
+    return lines.join("\n");
+  };
+
+  const send = () => {
+    const text = ask.trim();
+    if (!text || pending) return;
+    onAsk(text, buildContext());
+    setAsk("");
+  };
+
+  const threadEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    threadEnd.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, pending]);
 
   return (
     <div className="panel" role="dialog" aria-label="Today">
@@ -102,19 +142,32 @@ export function TodayPanel({ state, onStateChange }: Props) {
 
         <section>
           <h2>Ask</h2>
+          {(messages.length > 0 || pending) && (
+            <div className="thread">
+              {messages.map((m) => (
+                <div key={m.id} className={`msg msg-${m.role}${m.error ? " msg-error" : ""}`}>
+                  {m.text}
+                </div>
+              ))}
+              {pending && <div className="msg msg-model msg-pending">…</div>}
+              <div ref={threadEnd} />
+            </div>
+          )}
           <div className="input-row">
             <input
               value={ask}
               onChange={(e) => setAsk(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
               placeholder="English, தமிழ், or Tanglish…"
             />
+            <button onClick={send} disabled={!ask.trim() || pending}>
+              Ask
+            </button>
             <button title="Voice comes in a later slice" disabled>
               🎤
             </button>
           </div>
-          <p className="hint">
-            {lang ? `Detected: ${lang}. ` : ""}Chat with The Boss arrives in a later slice.
-          </p>
+          {lang && <p className="hint">Detected: {lang}</p>}
         </section>
 
         <section>
@@ -150,6 +203,7 @@ export function TodayPanel({ state, onStateChange }: Props) {
 
         <section>
           <h2>Controls</h2>
+          <ApiKeySettings />
           <label className="toggle">
             <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} />
             Mute

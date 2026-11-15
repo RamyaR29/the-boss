@@ -5,6 +5,7 @@ import {
   LogicalPosition,
   LogicalSize,
 } from "@tauri-apps/api/window";
+import { askBoss, type ChatMessage } from "./chat";
 import { Elephant, type CharacterState } from "./Elephant";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
@@ -26,6 +27,41 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<Side>("left");
   const [charTop, setCharTop] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pending, setPending] = useState(false);
+  const [bubble, setBubble] = useState<string | null>(null);
+  const nextId = useRef(1);
+  const talkTimer = useRef<number | undefined>(undefined);
+
+  const ask = useCallback(
+    async (text: string, context: string) => {
+      const userMsg: ChatMessage = { id: nextId.current++, role: "user", text };
+      const withUser = [...messages, userMsg];
+      setMessages(withUser);
+      setPending(true);
+      setBubble(null);
+      window.clearTimeout(talkTimer.current);
+      setState("thinking");
+      try {
+        const reply = await askBoss(withUser, context);
+        setMessages((m) => [...m, { id: nextId.current++, role: "model", text: reply }]);
+        setBubble(reply);
+        setState("talking");
+        // Talk for roughly as long as it takes to read the reply, then go idle.
+        const ms = Math.min(8000, 1500 + reply.length * 40);
+        talkTimer.current = window.setTimeout(() => setState("idle"), ms);
+      } catch (e) {
+        setMessages((m) => [
+          ...m,
+          { id: nextId.current++, role: "model", text: String(e), error: true },
+        ]);
+        setState("idle");
+      } finally {
+        setPending(false);
+      }
+    },
+    [messages],
+  );
 
   // Where the character window sat before the panel opened, so closing puts it back.
   const closedPos = useRef<{ x: number; y: number } | null>(null);
@@ -68,6 +104,7 @@ export default function App() {
     try {
       const win = getCurrentWindow();
       setOpen(false);
+      setBubble(null);
       const sf = await win.scaleFactor();
       const pos = (await win.outerPosition()).toLogical(sf);
       // If the user dragged while open, keep the character where it now is.
@@ -84,19 +121,20 @@ export default function App() {
 
   const toggle = useCallback(() => (open ? closePanel() : openPanel()), [open, openPanel, closePanel]);
 
-  // Escape or clicking another app closes the panel.
+  // Escape or clicking another app closes the panel. While a question is pending the
+  // panel stays open, so a macOS Keychain prompt taking focus doesn't hide the answer.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && closePanel();
     window.addEventListener("keydown", onKey);
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) closePanel();
+      if (!focused && !pending) closePanel();
     });
     return () => {
       window.removeEventListener("keydown", onKey);
       unlisten.then((f) => f());
     };
-  }, [open, closePanel]);
+  }, [open, closePanel, pending]);
 
   // Click opens/closes the panel; dragging moves the character without opening it.
   const onPointerDown = (e: React.PointerEvent) => {
@@ -119,16 +157,30 @@ export default function App() {
 
   return (
     <div className={`app ${open ? "is-open" : ""} side-${side}`}>
-      {open && <TodayPanel state={state} onStateChange={setState} />}
-      <div
-        className="character"
-        style={{ marginTop: open ? charTop : 0 }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        title="Click to open Today · drag to move"
-      >
-        <Elephant state={state} />
+      {open && (
+        <TodayPanel
+          state={state}
+          onStateChange={setState}
+          messages={messages}
+          pending={pending}
+          onAsk={ask}
+        />
+      )}
+      <div className="character-column" style={{ marginTop: open ? charTop : 0 }}>
+        <div
+          className="character"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          title="Click to open Today · drag to move"
+        >
+          <Elephant state={state} />
+        </div>
+        {open && bubble && (
+          <div className="bubble" onClick={() => setBubble(null)} title="Click to dismiss">
+            {bubble}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -46,12 +46,66 @@ body,
 /* side-left: panel, then character (DOM order); side-right: character, then panel */
 .app.side-right { flex-direction: row-reverse; }
 
+.character-column {
+  width: 160px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .character {
   width: 160px;
   height: 180px;
   flex: none;
   cursor: grab;
 }
+
+/* ---------- speech bubble (below the elephant) ---------- */
+.bubble {
+  position: relative;
+  margin-top: 6px;
+  width: 152px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  padding: 8px 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  cursor: pointer;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ---------- chat thread ---------- */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+.msg {
+  max-width: 85%;
+  padding: 6px 9px;
+  border-radius: 10px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.msg-user { align-self: flex-end; background: var(--accent); color: var(--accent-fg); }
+.msg-model { align-self: flex-start; background: var(--card); }
+.msg-error { color: var(--alert); }
+.msg-pending { color: var(--muted); }
+
+.api-key { margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.api-key .label { font-size: 11px; color: var(--muted); }
+.key-saved { flex: 1; align-self: center; }
+.hint.error { color: var(--alert); }
 
 /* ---------- panel ---------- */
 .panel {
