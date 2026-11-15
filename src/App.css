@@ -102,6 +102,31 @@ body,
 .msg-error { color: var(--alert); }
 .msg-pending { color: var(--muted); }
 
+.h2-row { justify-content: space-between; }
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+h2 button.link:only-child { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.past-list li { display: flex; gap: 6px; align-items: center; padding: 4px 0; }
+.past-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  min-width: 0;
+}
+.past-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px; }
+.past-view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; color: var(--muted); }
+
 .api-key { margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
 .api-key .label { font-size: 11px; color: var(--muted); }
 .key-saved { flex: 1; align-self: center; }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiKeySettings } from "./ApiKeySettings";
+import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
 import { CHARACTER_STATES, type CharacterState } from "./Elephant";
 import {
@@ -35,9 +36,19 @@ interface Props {
   messages: ChatMessage[];
   pending: boolean;
   onAsk: (text: string, context: string) => void;
+  sessionId: string;
+  onNewChat: () => void;
 }
 
-export function TodayPanel({ state, onStateChange, messages, pending, onAsk }: Props) {
+export function TodayPanel({
+  state,
+  onStateChange,
+  messages,
+  pending,
+  onAsk,
+  sessionId,
+  onNewChat,
+}: Props) {
   const [needsYou, setNeedsYou] = useState(mockNeedsYou);
   const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
@@ -141,7 +152,14 @@ export function TodayPanel({ state, onStateChange, messages, pending, onAsk }: P
         </section>
 
         <section>
-          <h2>Ask</h2>
+          <h2 className="h2-row">
+            Ask
+            {messages.length > 0 && (
+              <button className="link" onClick={onNewChat} disabled={pending}>
+                + New chat
+              </button>
+            )}
+          </h2>
           {(messages.length > 0 || pending) && (
             <div className="thread">
               {messages.map((m) => (
@@ -169,6 +187,8 @@ export function TodayPanel({ state, onStateChange, messages, pending, onAsk }: P
           </div>
           {lang && <p className="hint">Detected: {lang}</p>}
         </section>
+
+        <PastChats currentId={sessionId} />
 
         <section>
           <h2>Park an idea</h2>

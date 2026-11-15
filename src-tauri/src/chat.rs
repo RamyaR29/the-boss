@@ -1,6 +1,8 @@
 //! Sends a chat turn to the Gemini API (generateContent) and returns the reply.
 
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -12,6 +14,27 @@ use crate::keychain::read_api_key;
 /// retires either one.
 const MODELS: [&str; 2] = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
 const ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+
+/// After a model says it's busy (or limited, or gone), skip it for this long.
+const SKIP_BUSY_FOR: Duration = Duration::from_secs(10 * 60);
+
+/// Models that recently failed, and when they may be tried again.
+static BUSY_UNTIL: Mutex<Option<HashMap<&'static str, Instant>>> = Mutex::new(None);
+
+fn is_busy(model: &str) -> bool {
+    let guard = BUSY_UNTIL.lock().unwrap();
+    guard
+        .as_ref()
+        .and_then(|m| m.get(model))
+        .is_some_and(|until| Instant::now() < *until)
+}
+
+fn mark_busy(model: &'static str) {
+    let mut guard = BUSY_UNTIL.lock().unwrap();
+    guard
+        .get_or_insert_with(HashMap::new)
+        .insert(model, Instant::now() + SKIP_BUSY_FOR);
+}
 
 const SYSTEM_PROMPT: &str = "\
 You are The Boss, a friendly personal assistant shaped like a small cartoon elephant that lives on the \
@@ -45,11 +68,13 @@ struct CallError {
 #[tauri::command]
 pub async fn ask(history: Vec<ChatTurn>, context: String) -> Result<String, String> {
     eprintln!("[ask] reading key from Keychain (macOS may show a permission prompt)");
+    let key_started = Instant::now();
     // Keychain reads can block on a macOS permission prompt, so keep them off the async runtime.
     let key = tauri::async_runtime::spawn_blocking(read_api_key)
         .await
         .map_err(|e| format!("Keychain read failed: {e}"))??
         .ok_or("No Gemini API key yet. Add one under Controls → Gemini API key.")?;
+    eprintln!("[ask] Keychain read took {} ms", key_started.elapsed().as_millis());
 
     let contents: Vec<Value> = history
         .iter()
@@ -72,29 +97,31 @@ pub async fn ask(history: Vec<ChatTurn>, context: String) -> Result<String, Stri
     let client = reqwest::Client::new();
     let mut last_error = String::new();
 
-    for (i, model) in MODELS.iter().enumerate() {
-        // The main model gets one quick retry, since overload spikes are often brief.
-        let attempts = if i == 0 { 2 } else { 1 };
-        for attempt in 1..=attempts {
-            eprintln!("[ask] sending {} message(s) to {model} (attempt {attempt})", contents.len());
-            match call_model(&client, model, &key, &body).await {
-                Ok(text) => return Ok(text),
-                Err(e) if e.try_next_model => {
-                    last_error = e.message;
-                    if attempt < attempts {
-                        tokio_sleep(Duration::from_millis(1500)).await;
-                    }
-                }
-                Err(e) => return Err(e.message),
+    // Skip models that were busy in the last 10 minutes, unless every model is.
+    let mut order: Vec<&'static str> = MODELS.iter().copied().filter(|m| !is_busy(m)).collect();
+    if order.is_empty() {
+        order = MODELS.to_vec();
+    }
+
+    let last = order.len() - 1;
+    for (i, model) in order.into_iter().enumerate() {
+        // Give up on a stalled model quickly when there's another to try.
+        let timeout = Duration::from_secs(if i < last { 20 } else { 45 });
+        eprintln!("[ask] sending {} message(s) to {model}", contents.len());
+        let started = Instant::now();
+        let result = call_model(&client, model, &key, &body, timeout).await;
+        eprintln!("[ask] {model} took {} ms", started.elapsed().as_millis());
+        match result {
+            Ok(text) => return Ok(text),
+            Err(e) if e.try_next_model => {
+                eprintln!("[ask] skipping {model} for the next 10 minutes");
+                mark_busy(model);
+                last_error = e.message;
             }
+            Err(e) => return Err(e.message),
         }
     }
     Err(last_error)
-}
-
-async fn tokio_sleep(d: Duration) {
-    // Tauri's async runtime is Tokio; spawn_blocking keeps this dependency-free.
-    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
 }
 
 async fn call_model(
@@ -102,6 +129,7 @@ async fn call_model(
     model: &str,
     key: &str,
     body: &Value,
+    timeout: Duration,
 ) -> Result<String, CallError> {
     let fatal = |message: String| CallError { message, try_next_model: false };
     let retryable = |message: String| CallError { message, try_next_model: true };
@@ -109,7 +137,7 @@ async fn call_model(
     let res = client
         .post(format!("{ENDPOINT}/{model}:generateContent"))
         .header("x-goog-api-key", key)
-        .timeout(Duration::from_secs(45))
+        .timeout(timeout)
         .json(body)
         .send()
         .await

@@ -5,7 +5,17 @@ import {
   LogicalPosition,
   LogicalSize,
 } from "@tauri-apps/api/window";
-import { askBoss, type ChatMessage } from "./chat";
+import {
+  askBoss,
+  isStale,
+  listSessions,
+  loadSession,
+  newSession,
+  saveSession,
+  SESSION_IDLE_MS,
+  type ChatMessage,
+  type Session,
+} from "./chat";
 import { Elephant, type CharacterState } from "./Elephant";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
@@ -22,45 +32,77 @@ const DRAG_THRESHOLD = 4;
 
 type Side = "left" | "right";
 
+const lastId = (msgs: ChatMessage[]) => (msgs.length ? msgs[msgs.length - 1].id : 0);
+
 export default function App() {
   const [state, setState] = useState<CharacterState>("idle");
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<Side>("left");
   const [charTop, setCharTop] = useState(0);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [session, setSession] = useState<Session>(newSession);
   const [pending, setPending] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
-  const nextId = useRef(1);
   const talkTimer = useRef<number | undefined>(undefined);
+  const messages = session.messages;
+
+  // On launch, continue the most recent chat if it was active in the last 30 minutes.
+  useEffect(() => {
+    listSessions()
+      .then(async (all) => {
+        const latest = all[0];
+        if (latest && Date.now() - latest.lastAt <= SESSION_IDLE_MS) {
+          setSession(await loadSession(latest.id));
+        }
+      })
+      .catch((e) => console.error("Couldn't load chats:", e));
+  }, []);
+
+  // Save the current chat after every change, so quitting never loses it.
+  useEffect(() => {
+    if (session.messages.length === 0) return;
+    saveSession(session).catch((e) => console.error("Couldn't save chat:", e));
+  }, [session]);
+
+  const startNewChat = useCallback(() => {
+    setSession(newSession());
+    setBubble(null);
+  }, []);
 
   const ask = useCallback(
     async (text: string, context: string) => {
-      const userMsg: ChatMessage = { id: nextId.current++, role: "user", text };
-      const withUser = [...messages, userMsg];
-      setMessages(withUser);
+      // After 30 quiet minutes, this question starts a fresh chat.
+      const base = isStale(session) ? newSession() : session;
+      const nextId = lastId(base.messages) + 1;
+      const userMsg: ChatMessage = { id: nextId, role: "user", text };
+      const withUser = [...base.messages, userMsg];
+      const add = (msg: Omit<ChatMessage, "id">) =>
+        setSession((s) => ({
+          ...s,
+          lastAt: Date.now(),
+          messages: [...s.messages, { ...msg, id: lastId(s.messages) + 1 }],
+        }));
+
+      setSession({ ...base, lastAt: Date.now(), messages: withUser });
       setPending(true);
       setBubble(null);
       window.clearTimeout(talkTimer.current);
       setState("thinking");
       try {
         const reply = await askBoss(withUser, context);
-        setMessages((m) => [...m, { id: nextId.current++, role: "model", text: reply }]);
+        add({ role: "model", text: reply });
         setBubble(reply);
         setState("talking");
         // Talk for roughly as long as it takes to read the reply, then go idle.
         const ms = Math.min(8000, 1500 + reply.length * 40);
         talkTimer.current = window.setTimeout(() => setState("idle"), ms);
       } catch (e) {
-        setMessages((m) => [
-          ...m,
-          { id: nextId.current++, role: "model", text: String(e), error: true },
-        ]);
+        add({ role: "model", text: String(e), error: true });
         setState("idle");
       } finally {
         setPending(false);
       }
     },
-    [messages],
+    [session],
   );
 
   // Where the character window sat before the panel opened, so closing puts it back.
@@ -88,6 +130,8 @@ export default function App() {
       const height = Math.max(PANEL_H, pos.y - y + CHAR_H);
 
       closedPos.current = { x: pos.x, y: pos.y };
+      // Coming back after 30 quiet minutes shows a fresh chat.
+      setSession((s) => (isStale(s) ? newSession() : s));
       setSide(nextSide);
       setCharTop(pos.y - y);
       await win.setSize(new LogicalSize(OPEN_W, height));
@@ -164,6 +208,8 @@ export default function App() {
           messages={messages}
           pending={pending}
           onAsk={ask}
+          sessionId={session.id}
+          onNewChat={startNewChat}
         />
       )}
       <div className="character-column" style={{ marginTop: open ? charTop : 0 }}>
