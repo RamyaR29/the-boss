@@ -32,7 +32,8 @@ interface Props {
   sessionId: string;
   onNewChat: () => void;
   needsYou: NeedsYouItem[];
-  onResolve: (id: string) => void;
+  onResolve: (id: string, accepted: boolean) => void;
+  onCelebrate: () => void;
   muted: boolean;
   onMutedChange: (v: boolean) => void;
   quiet: boolean;
@@ -49,6 +50,7 @@ export function TodayPanel({
   onNewChat,
   needsYou,
   onResolve: resolve,
+  onCelebrate,
   muted,
   onMutedChange,
   quiet,
@@ -59,8 +61,11 @@ export function TodayPanel({
   const [idea, setIdea] = useState("");
   const [parked, setParked] = useState<string[]>([]);
 
-  const markDone = (id: string) =>
+  const markDone = (id: string) => {
+    const item = today.find((i) => i.id === id);
+    if (item && !item.done) onCelebrate();
     setToday((items) => items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+  };
   const snooze = (id: string) =>
     setToday((items) =>
       items
@@ -119,10 +124,10 @@ export function TodayPanel({
               <div key={n.id} className={`card card-${n.kind}`}>
                 <p>{n.text}</p>
                 <div className="card-actions">
-                  <button className="btn-primary" onClick={() => resolve(n.id)}>
+                  <button className="btn-primary" onClick={() => resolve(n.id, true)}>
                     {n.primary}
                   </button>
-                  <button onClick={() => resolve(n.id)}>{n.secondary}</button>
+                  <button onClick={() => resolve(n.id, false)}>{n.secondary}</button>
                 </div>
               </div>
             ))}

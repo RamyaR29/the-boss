@@ -1,100 +1,216 @@
+/*
+ * The Boss elephant. Target feel: 70% adorable, 20% clever, 10% mischievous.
+ * Motion stays small and slow at rest so it can sit beside your work for hours.
+ *
+ * Ear rotation directions (each ear pivots where it meets the head):
+ *   left ear:  positive deg = ear lifts,  negative = droops
+ *   right ear: negative deg = ear lifts,  positive = droops
+ */
+
 .elephant {
   display: block;
   overflow: visible;
-  --skin: #b7c7d8;
-  --skin-dark: #9fb3c8;
-  --ear-inner: #f3b6c4;
-  --ink: #2b3440;
-  --accent: #e8743b;
+  --skin: #b9b5d3;       /* warm lavender-gray */
+  --skin-dark: #a29ec0;
+  --skin-deep: #8f8ab0;
+  --ear-inner: #f0bccb;
+  --ink: #2e2b3f;
+  --coral: #f2795b;
+  --coral-dark: #d65f44;
+  --gold: #c9a54a;
+  --accent: #f2795b;
 }
 
-.elephant * {
-  transform-box: fill-box;
-}
+.elephant * { transform-box: fill-box; }
 
-.shadow { fill: rgba(0, 0, 0, 0.18); }
+.shadow { fill: rgba(0, 0, 0, 0.16); transform-origin: center; }
 .head { fill: var(--skin); }
 .body { fill: var(--skin-dark); }
 .foot { fill: var(--skin-dark); stroke: var(--skin); stroke-width: 2; }
+.toe { fill: #ece9f6; }
 .ear-outer { fill: var(--skin-dark); }
 .ear-inner { fill: var(--ear-inner); }
-.cheek { fill: #f29fb3; opacity: 0.6; }
-.pupil { fill: var(--ink); }
-.shine { fill: #fff; }
+.cheek { fill: #f29fb3; opacity: 0.55; }
+.pupil { fill: var(--ink); transform-origin: center; transition: transform 0.25s ease; }
+.shine { fill: #fff; transition: transform 0.25s ease; }
 .lid { fill: var(--skin); transform-origin: top; }
-.tusk { fill: none; stroke: #fffaf0; stroke-width: 4; stroke-linecap: round; }
-.mouth { fill: #7a3040; transform-origin: center; }
-.trunk { stroke: var(--skin); stroke-width: 14; transform-origin: top center; }
-.think-dots circle { fill: #fff; stroke: var(--ink); stroke-width: 1.5; opacity: 0; }
-.waves path { stroke: var(--accent); stroke-width: 3; opacity: 0; }
-.ear-left { transform-origin: right center; }
-.ear-right { transform-origin: left center; }
+.eyes-closed path,
+.eyes-happy path { stroke: var(--ink); stroke-width: 2.6; }
+.glasses { stroke: var(--gold); stroke-width: 2.2; }
+.lens { fill: rgba(255, 255, 255, 0.14); }
+.mouth-smile { stroke: #7a3a4c; stroke-width: 2.2; }
+.mouth-open { fill: #7a3a4c; transform-origin: center; }
+.trunk { transition: opacity 0.18s ease; }
+.trunk-edge { stroke: var(--skin-deep); stroke-width: 15; }
+.trunk-fill { stroke: var(--skin); stroke-width: 11.5; }
+.pack { fill: var(--coral); }
+.pack-flap { fill: var(--coral-dark); }
+.pack-clasp { fill: var(--gold); }
+.strap { stroke: var(--coral); stroke-width: 5; }
 
-/* ---------- idle: gentle bob + blink ---------- */
-.bob { animation: bob 3s ease-in-out infinite; transform-origin: bottom center; }
-.lid { animation: blink 4.5s infinite; }
+.ear-left { transform-origin: right center; transition: transform 0.4s ease; }
+.ear-right { transform-origin: left center; transition: transform 0.4s ease; }
+.head-group { transform-origin: 50% 70%; transition: transform 0.4s ease; }
+.bob { transform-origin: bottom center; }
 
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+/* Hidden by default; moods reveal them */
+.eyes-closed, .eyes-happy, .mouth-open,
+.trunk-point,
+.think-dots circle, .q-mark, .zzz text, .waves path, .sparkles path {
+  opacity: 0;
 }
-@keyframes blink {
-  0%, 92%, 100% { height: 0; }
-  95% { height: 14px; }
-}
+.think-dots circle { fill: #fff; stroke: var(--ink); stroke-width: 1.5; }
+.q-mark { fill: var(--accent); font: 700 24px -apple-system, sans-serif; }
+.zzz text { fill: var(--skin-deep); font: 700 15px -apple-system, sans-serif; }
+.waves path { stroke: var(--accent); stroke-width: 3; }
+.sparkles path { fill: var(--gold); transform-origin: center; }
 
-/* ---------- listening: ears fan out, sound waves ---------- */
-.state-listening .ear-left { animation: ear-left 0.9s ease-in-out infinite; }
-.state-listening .ear-right { animation: ear-right 0.9s ease-in-out infinite; }
-.state-listening .waves path { animation: wave 1.2s ease-out infinite; }
+/* ---------- idle: slow breath, gentle ear sway, blink ---------- */
+.state-idle .bob { animation: bob 3.4s ease-in-out infinite; }
+.state-idle .ear-left { animation: sway-left 5s ease-in-out infinite; }
+.state-idle .ear-right { animation: sway-right 5s ease-in-out infinite; }
+.lid { animation: blink 5s infinite; }
+
+/* Hover: the trunk lifts toward you, ready to help. Press: a little tap. */
+.character:hover .state-idle .trunk-rest,
+.character:hover .state-happy .trunk-rest { opacity: 0; }
+.character:hover .state-idle .trunk-point,
+.character:hover .state-happy .trunk-point { opacity: 1; }
+.character:active .state-idle .trunk-point { animation: tap 0.25s ease-out; }
+
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes sway-left { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(3deg); } }
+@keyframes sway-right { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-3deg); } }
+@keyframes blink { 0%, 93%, 100% { height: 0; } 96% { height: 16px; } }
+@keyframes tap { 50% { transform: translate(2px, 3px); } }
+
+/* ---------- listening: ears perk up, sound waves ---------- */
+.state-listening .ear-left { transform: rotate(12deg) scale(1.08); }
+.state-listening .ear-right { transform: rotate(-12deg) scale(1.08); }
+.state-listening .waves path { animation: fade-pulse 1.2s ease-out infinite; }
 .state-listening .waves path:nth-child(2) { animation-delay: 0.3s; }
 
-@keyframes ear-left {
-  0%, 100% { transform: scale(1.08) rotate(-4deg); }
-  50% { transform: scale(1.18) rotate(-10deg); }
-}
-@keyframes ear-right {
-  0%, 100% { transform: scale(1.08) rotate(4deg); }
-  50% { transform: scale(1.18) rotate(10deg); }
-}
-@keyframes wave {
-  0% { opacity: 0; }
-  40% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* ---------- thinking: looks up, thought dots ---------- */
+/* ---------- thinking: one ear tilted, eyes up, thought bubbles ---------- */
+.state-thinking .ear-right { transform: rotate(-16deg); }
 .state-thinking .pupil,
 .state-thinking .shine { transform: translate(2px, -3px); }
-.state-thinking .bob { animation: tilt 2.4s ease-in-out infinite; }
-.state-thinking .think-dots circle { animation: dot 1.5s ease-in-out infinite; }
+.state-thinking .head-group { transform: rotate(-4deg); }
+.state-thinking .think-dots circle { animation: fade-pulse 1.5s ease-in-out infinite; }
 .state-thinking .think-dots circle:nth-child(2) { animation-delay: 0.25s; }
 .state-thinking .think-dots circle:nth-child(3) { animation-delay: 0.5s; }
 
-@keyframes tilt {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
-}
-@keyframes dot {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
+/* ---------- talking: mouth moves, ears give small bounces ---------- */
+.state-talking .mouth-smile { opacity: 0; }
+.state-talking .mouth-open { opacity: 1; animation: talk 0.32s ease-in-out infinite alternate; }
+.state-talking .ear-left { animation: ear-bounce-left 0.9s ease-in-out infinite; }
+.state-talking .ear-right { animation: ear-bounce-right 0.9s ease-in-out infinite; }
+.state-talking .bob { animation: bob 1.8s ease-in-out infinite; }
+
+@keyframes talk { from { transform: scaleY(1); } to { transform: scaleY(2.6); } }
+@keyframes ear-bounce-left { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(5deg); } }
+@keyframes ear-bounce-right { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-5deg); } }
+
+/* ---------- happy: ears lifted, smiling eyes ---------- */
+.state-happy .ear-left { transform: rotate(8deg); }
+.state-happy .ear-right { transform: rotate(-8deg); }
+.state-happy .eyes-open { opacity: 0; }
+.state-happy .eyes-happy { opacity: 1; }
+.state-happy .bob { animation: bob 1.6s ease-in-out infinite; }
+
+/* ---------- confused: ears tilt out, head tilts, "?" ---------- */
+.state-confused .ear-left { transform: rotate(-14deg); }
+.state-confused .ear-right { transform: rotate(14deg); }
+.state-confused .head-group { transform: rotate(7deg); }
+.state-confused .q-mark { opacity: 1; animation: bob 1.4s ease-in-out infinite; }
+
+/* ---------- sleeping: lies low, ears droop, eyes closed, z z z ---------- */
+.state-sleeping .bob { transform: translateY(7px) scaleY(0.95); animation: none; }
+.state-sleeping .ear-left { transform: rotate(-18deg); }
+.state-sleeping .ear-right { transform: rotate(18deg); }
+.state-sleeping .eyes-open { opacity: 0; }
+.state-sleeping .eyes-closed { opacity: 1; }
+.state-sleeping .head-group { animation: breathe 4s ease-in-out infinite; }
+.state-sleeping .shadow { transform: scaleX(1.1); }
+.state-sleeping .zzz text { animation: drift 3s ease-in infinite; }
+.state-sleeping .zzz text:nth-child(2) { animation-delay: 1s; }
+.state-sleeping .zzz text:nth-child(3) { animation-delay: 2s; }
+
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.015); } }
+@keyframes drift {
+  0% { opacity: 0; transform: translate(0, 4px); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(6px, -8px); }
 }
 
-/* ---------- talking: mouth moves, trunk sways ---------- */
-.state-talking .mouth { animation: talk 0.35s ease-in-out infinite alternate; }
-.state-talking .trunk { animation: sway 0.9s ease-in-out infinite alternate; }
+/* ---------- celebrating: ears flap, little stomp, trunk up, sparkles ---------- */
+.state-celebrating .bob { animation: stomp 0.36s ease-in-out infinite alternate; }
+.state-celebrating .ear-left { animation: flap-left 0.18s ease-in-out infinite alternate; }
+.state-celebrating .ear-right { animation: flap-right 0.18s ease-in-out infinite alternate; }
+.state-celebrating .eyes-open { opacity: 0; }
+.state-celebrating .eyes-happy { opacity: 1; }
+.state-celebrating .trunk-rest { opacity: 0; }
+.state-celebrating .trunk-point { opacity: 1; }
+.state-celebrating .sparkles path { animation: twinkle 0.7s ease-in-out infinite alternate; }
+.state-celebrating .sparkles path:nth-child(2n) { animation-delay: 0.35s; }
 
-@keyframes talk {
-  from { transform: scaleY(1); }
-  to { transform: scaleY(3.2); }
-}
-@keyframes sway {
-  from { transform: rotate(-6deg); }
-  to { transform: rotate(6deg); }
-}
+@keyframes stomp { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-7px) rotate(3deg); } }
+@keyframes flap-left { from { transform: rotate(-6deg); } to { transform: rotate(18deg); } }
+@keyframes flap-right { from { transform: rotate(6deg); } to { transform: rotate(-18deg); } }
+@keyframes twinkle { from { opacity: 0.2; transform: scale(0.6); } to { opacity: 1; transform: scale(1.15); } }
+
+/* ---------- staring: "you forgot something" — still, wide eyes, straight at you ---------- */
+.state-staring .bob { animation: none; }
+.state-staring .lid { animation: none; }
+.state-staring .pupil { transform: scale(1.3); }
+.state-staring .head-group { transform: scale(1.04); }
+
+/* ---------- hands (front legs): one pose visible per mood ---------- */
+.arm { opacity: 0; transition: opacity 0.2s ease; }
+.arm-edge { stroke: var(--skin-deep); stroke-width: 15; }
+.arm-fill { stroke: var(--skin-dark); stroke-width: 11.5; }
+/* Each arm pivots at its shoulder */
+.arm-l-up, .arm-l-out { transform-origin: right bottom; }
+.arm-r-up, .arm-r-out { transform-origin: left bottom; }
+.arm-r-rest { transform-origin: right top; }
+
+/* Default: both hands resting on the tummy */
+.arm-l-rest, .arm-r-rest { opacity: 1; }
+
+/* thinking: right hand on chin */
+.state-thinking .arm-r-rest { opacity: 0; }
+.state-thinking .arm-r-chin { opacity: 1; }
+
+/* talking: small hand gestures */
+.state-talking .arm-r-rest { animation: gesture 1.1s ease-in-out infinite; }
+
+/* happy: right hand waves */
+.state-happy .arm-r-rest { opacity: 0; }
+.state-happy .arm-r-up { opacity: 1; animation: wave 0.5s ease-in-out infinite alternate; }
+
+/* confused: a little shrug */
+.state-confused .arm-l-rest, .state-confused .arm-r-rest { opacity: 0; }
+.state-confused .arm-l-out, .state-confused .arm-r-out { opacity: 1; }
+
+/* sleeping: left hand tucked under the cheek */
+.state-sleeping .arm-l-rest { opacity: 0; }
+.state-sleeping .arm-l-cheek { opacity: 1; }
+
+/* celebrating: both hands up */
+.state-celebrating .arm-l-rest, .state-celebrating .arm-r-rest { opacity: 0; }
+.state-celebrating .arm-l-up { opacity: 1; animation: cheer-l 0.36s ease-in-out infinite alternate; }
+.state-celebrating .arm-r-up { opacity: 1; animation: cheer-r 0.36s ease-in-out infinite alternate; }
+
+@keyframes gesture { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
+@keyframes wave { from { transform: rotate(-8deg); } to { transform: rotate(14deg); } }
+@keyframes cheer-l { from { transform: rotate(6deg); } to { transform: rotate(-8deg); } }
+@keyframes cheer-r { from { transform: rotate(-6deg); } to { transform: rotate(8deg); } }
+
+@keyframes fade-pulse { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .elephant *, .elephant { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
-  .state-listening .waves path,
-  .state-thinking .think-dots circle { opacity: 1; }
+  .elephant, .elephant * { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
+  .state-thinking .think-dots circle,
+  .state-sleeping .zzz text,
+  .state-celebrating .sparkles path,
+  .state-listening .waves path { opacity: 1; }
 }

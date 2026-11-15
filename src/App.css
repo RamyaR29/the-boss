@@ -4,7 +4,7 @@
   --muted: #6b7684;
   --line: rgba(0, 0, 0, 0.08);
   --card: #f5f7fa;
-  --accent: #e8743b;
+  --accent: #f2795b; /* coral, matching the elephant's backpack */
   --accent-fg: #fff;
   --approval: #3b7be8;
   --alert: #d64545;
@@ -275,8 +275,6 @@ input[type="text"],
 .toggle { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 .state-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .state-preview > span { color: var(--muted); font-size: 11px; }
-.segmented { display: flex; }
-.segmented button { border-radius: 0; flex: 1; text-transform: capitalize; }
-.segmented button:first-child { border-radius: 7px 0 0 7px; }
-.segmented button:last-child { border-radius: 0 7px 7px 0; }
+.segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.segmented button { text-transform: capitalize; padding: 4px 2px; font-size: 12px; }
 .segmented button.active { background: var(--accent); color: var(--accent-fg); }

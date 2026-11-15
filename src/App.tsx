@@ -33,6 +33,8 @@ const PANEL_H = 560;
 const GAP = 8;
 const OPEN_W = CHAR_W + GAP + PANEL_W;
 const DRAG_THRESHOLD = 4;
+const SLEEP_AFTER_MS = 15 * 60 * 1000;
+const STARE_EVERY_MS = 20 * 60 * 1000;
 
 type Side = "left" | "right";
 
@@ -66,15 +68,51 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<Side>("left");
   const [charTop, setCharTop] = useState(0);
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
   const [session, setSession] = useState<Session>(newSession);
   const [pending, setPending] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
-  const talkTimer = useRef<number | undefined>(undefined);
+  const moodTimer = useRef<number | undefined>(undefined);
   const messages = session.messages;
+
+  // ---------- moods ----------
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  /** Show a mood for a while, then go back to idle (unless something else took over). */
+  const flash = useCallback((mood: CharacterState, ms: number) => {
+    window.clearTimeout(moodTimer.current);
+    setState(mood);
+    moodTimer.current = window.setTimeout(
+      () => setState((s) => (s === mood ? "idle" : s)),
+      ms,
+    );
+  }, []);
+
+  // Any interaction counts as activity and wakes a sleeping elephant.
+  const lastActivity = useRef(Date.now());
+  const touch = useCallback(() => {
+    lastActivity.current = Date.now();
+    if (stateRef.current === "sleeping") setState("idle");
+  }, []);
+
+  const celebrate = useCallback(() => {
+    touch();
+    flash("celebrating", 2200);
+  }, [flash, touch]);
+
   const [needsYou, setNeedsYou] = useState(mockNeedsYou);
   const resolveNeed = useCallback(
-    (id: string) => setNeedsYou((items) => items.filter((i) => i.id !== id)),
-    [],
+    (id: string, accepted: boolean) => {
+      setNeedsYou((items) => items.filter((i) => i.id !== id));
+      if (accepted) celebrate();
+    },
+    [celebrate],
   );
   const [muted, setMuted] = usePref("boss.muted", false);
   const [quiet, setQuiet] = usePref("boss.quiet", false);
@@ -90,6 +128,44 @@ export default function App() {
   useEffect(() => {
     if (quiet) setBubble(null);
   }, [quiet]);
+
+  // Fall asleep after a quiet stretch while the panel is closed.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (
+        stateRef.current === "idle" &&
+        !openRef.current &&
+        Date.now() - lastActivity.current > SLEEP_AFTER_MS
+      ) {
+        setState("sleeping");
+      }
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // "You forgot something": when an urgent alert is waiting and the panel is closed,
+  // stare straight at the user for a few seconds, at most once every 20 minutes.
+  const lastStare = useRef(0);
+  const hasAlert = needsYou.some((n) => n.kind === "alert");
+  useEffect(() => {
+    if (!hasAlert) return;
+    const check = () => {
+      if (
+        stateRef.current === "idle" &&
+        !openRef.current &&
+        Date.now() - lastStare.current > STARE_EVERY_MS
+      ) {
+        lastStare.current = Date.now();
+        flash("staring", 6000);
+      }
+    };
+    const first = window.setTimeout(check, 5000);
+    const id = window.setInterval(check, 60_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, [hasAlert, flash]);
 
   // On launch, continue the most recent chat if it was active in the last 30 minutes.
   useEffect(() => {
@@ -132,8 +208,13 @@ export default function App() {
       setSession({ ...base, lastAt: Date.now(), messages: withUser });
       setPending(true);
       setBubble(null);
-      window.clearTimeout(talkTimer.current);
+      touch();
+      window.clearTimeout(moodTimer.current);
       setState("thinking");
+      // After talking, look pleased for a moment, then settle.
+      const afterTalking = () => {
+        if (stateRef.current === "talking") flash("happy", 1800);
+      };
       try {
         const reply = await askBoss(withUser, context);
         add({ role: "model", text: reply });
@@ -142,21 +223,22 @@ export default function App() {
         if (silent) {
           // No voice: talk for roughly as long as it takes to read the reply.
           const ms = Math.min(8000, 1500 + reply.length * 40);
-          talkTimer.current = window.setTimeout(() => setState("idle"), ms);
+          moodTimer.current = window.setTimeout(afterTalking, ms);
         } else {
           // Talk exactly while the voice speaks: Samantha for English, Vani for Tamil/Tanglish.
           speak(reply, voiceFor(reply))
             .catch((e) => console.error("Voice failed:", e))
-            .finally(() => setState((s) => (s === "talking" ? "idle" : s)));
+            .finally(afterTalking);
         }
       } catch (e) {
         add({ role: "model", text: String(e), error: true });
-        setState("idle");
+        flash("confused", 3000);
       } finally {
         setPending(false);
+        lastActivity.current = Date.now();
       }
     },
-    [session, quiet, silent],
+    [session, quiet, silent, touch, flash],
   );
 
   // Where the character window sat before the panel opened, so closing puts it back.
@@ -261,6 +343,7 @@ export default function App() {
 
   // Click opens/closes the panel; dragging moves the character without opening it.
   const onPointerDown = (e: React.PointerEvent) => {
+    touch();
     if (e.button !== 0) return;
     pointer.current = { x: e.screenX, y: e.screenY, dragged: false };
   };
@@ -283,7 +366,11 @@ export default function App() {
       {open && (
         <TodayPanel
           state={state}
-          onStateChange={setState}
+          onStateChange={(s) => {
+            window.clearTimeout(moodTimer.current);
+            setState(s);
+          }}
+          onCelebrate={celebrate}
           messages={messages}
           pending={pending}
           onAsk={ask}
