@@ -1,12 +1,28 @@
 # The Boss
 
-A personal AI assistant that lives on the Mac as a small animated elephant. It takes instructions in English, Tamil or Tanglish, watches mail, calendar, reminders and Canvas, and speaks up when something needs attention.
+A personal AI assistant that lives on the Mac as a small, clever elephant with round gold glasses and a tiny coral backpack. It takes instructions in English, Tamil or Tanglish, watches mail, calendar, reminders and Canvas, and speaks up when something needs attention.
 
 > Status: early V1. The elephant, the Today panel (mock data), typed chat and spoken replies work. Real Canvas, calendar and mail come next.
 
 ## What works today
 
-- **Floating elephant**: an original cartoon elephant in a transparent, always-on-top window. Drag it anywhere. It has four animation states: idle, listening, thinking and talking.
+- **Floating elephant**: an original lavender-gray elephant with round gold glasses and a tiny coral backpack, in a transparent, always-on-top window. Drag it anywhere. Its trunk points at you when you hover.
+- **Moods**: its ears, trunk and front legs show how it feels.
+
+  | Mood | When | How it looks |
+  | --- | --- | --- |
+  | Idle | Default | Gentle ear sway, hands resting |
+  | Thinking | Waiting for an answer | One ear tilted, hand on chin, thought bubbles |
+  | Talking | While it speaks | Mouth moves, small hand gestures |
+  | Happy | Just after a reply | Ears lifted, smiling eyes, waves |
+  | Confused | An error | Ears tilted out, a shrug, a "?" |
+  | Celebrating | You approve a card or finish a Today item | Ears flap, stomp, both hands up |
+  | Sleeping | 15 minutes with no activity | Lies low, ears droop, "z z z" (any click wakes it) |
+  | Staring | An urgent alert is waiting (at most every 20 minutes) | Still, wide eyes, looking at you |
+  | Listening | Reserved for voice input | Ears perk up |
+
+  You can preview every mood under **Controls → Preview character**.
+- **Personality**: calm, clever and warm, with a little mischief. Never childish.
 - **Today panel**: click the elephant to open it beside the character. It has Needs you, Today, Ask, Park an idea, Recently and Controls sections. Press Escape or click elsewhere to close it. The deadlines and events are **mock data** for now.
 - **Chat**: ask in English, தமிழ் or Tanglish and The Boss replies in the same language. Answers show in a speech bubble under the elephant and in a thread in the panel. The Boss knows your Today list, so "what's due tonight?" works.
 - **Voice**: replies are read aloud with built-in macOS voices: Samantha for English, Vani for Tamil and Tanglish. The elephant talks while the voice plays.
