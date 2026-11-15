@@ -1,26 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiKeySettings } from "./ApiKeySettings";
+import { detectLanguage } from "./language";
 import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
 import { CHARACTER_STATES, type CharacterState } from "./Elephant";
 import {
-  mockNeedsYou,
   mockRecently,
   mockToday,
   sourceLabel,
+  type NeedsYouItem,
   type TodayItem,
 } from "./mockData";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
-/** Rough guess for the "detected language" label; real detection comes with the agent. */
-function guessLanguage(text: string): string {
-  if (!text.trim()) return "";
-  if (/[஀-௿]/.test(text)) return "Tamil";
-  const tanglish = /\b(pannu|pannanum|naalaiku|innaiku|enna|illa|seri|venum|romba|epdi|inga|anga|sollu|paaru)\b/i;
-  if (tanglish.test(text)) return "Tanglish";
-  return "English";
-}
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
@@ -38,6 +31,12 @@ interface Props {
   onAsk: (text: string, context: string) => void;
   sessionId: string;
   onNewChat: () => void;
+  needsYou: NeedsYouItem[];
+  onResolve: (id: string) => void;
+  muted: boolean;
+  onMutedChange: (v: boolean) => void;
+  quiet: boolean;
+  onQuietChange: (v: boolean) => void;
 }
 
 export function TodayPanel({
@@ -48,16 +47,18 @@ export function TodayPanel({
   onAsk,
   sessionId,
   onNewChat,
+  needsYou,
+  onResolve: resolve,
+  muted,
+  onMutedChange,
+  quiet,
+  onQuietChange,
 }: Props) {
-  const [needsYou, setNeedsYou] = useState(mockNeedsYou);
   const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
   const [idea, setIdea] = useState("");
   const [parked, setParked] = useState<string[]>([]);
-  const [muted, setMuted] = useState(false);
-  const [quietHours, setQuietHours] = useState(false);
 
-  const resolve = (id: string) => setNeedsYou((items) => items.filter((i) => i.id !== id));
   const markDone = (id: string) =>
     setToday((items) => items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
   const snooze = (id: string) =>
@@ -72,7 +73,7 @@ export function TodayPanel({
     setIdea("");
   };
 
-  const lang = guessLanguage(ask);
+  const lang = detectLanguage(ask);
 
   // What The Boss knows about today, sent with each question.
   const buildContext = () => {
@@ -225,16 +226,16 @@ export function TodayPanel({
           <h2>Controls</h2>
           <ApiKeySettings />
           <label className="toggle">
-            <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} />
-            Mute
+            <input type="checkbox" checked={muted} onChange={(e) => onMutedChange(e.target.checked)} />
+            Mute voice
           </label>
           <label className="toggle">
             <input
               type="checkbox"
-              checked={quietHours}
-              onChange={(e) => setQuietHours(e.target.checked)}
+              checked={quiet}
+              onChange={(e) => onQuietChange(e.target.checked)}
             />
-            Quiet hours
+            Quiet mode (no voice, no speech bubble)
           </label>
           <div className="state-preview">
             <span>Preview character:</span>

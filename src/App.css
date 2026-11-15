@@ -55,10 +55,31 @@ body,
 }
 
 .character {
+  position: relative;
   width: 160px;
   height: 180px;
   flex: none;
   cursor: grab;
+}
+
+/* Red count badge on the elephant's head */
+.badge {
+  position: absolute;
+  top: 34px;
+  right: 22px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: var(--alert);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }
 
 /* ---------- speech bubble (below the elephant) ---------- */

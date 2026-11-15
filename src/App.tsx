@@ -16,7 +16,11 @@ import {
   type ChatMessage,
   type Session,
 } from "./chat";
+import { invoke } from "@tauri-apps/api/core";
+import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { Elephant, type CharacterState } from "./Elephant";
+import { voiceFor } from "./language";
+import { mockNeedsYou } from "./mockData";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
 import "./Elephant.css";
@@ -34,6 +38,29 @@ type Side = "left" | "right";
 
 const lastId = (msgs: ChatMessage[]) => (msgs.length ? msgs[msgs.length - 1].id : 0);
 
+// Small per-device preferences (mute, quiet) survive restarts via localStorage.
+function usePref(key: string, initial: boolean) {
+  const [value, setValue] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? initial : v === "1";
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, value ? "1" : "0");
+    } catch {
+      /* storage unavailable: keep it for this run only */
+    }
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
+const speak = (text: string, voice: string) => invoke<void>("speak", { text, voice });
+const stopSpeaking = () => invoke<void>("stop_speaking");
+
 export default function App() {
   const [state, setState] = useState<CharacterState>("idle");
   const [open, setOpen] = useState(false);
@@ -44,6 +71,25 @@ export default function App() {
   const [bubble, setBubble] = useState<string | null>(null);
   const talkTimer = useRef<number | undefined>(undefined);
   const messages = session.messages;
+  const [needsYou, setNeedsYou] = useState(mockNeedsYou);
+  const resolveNeed = useCallback(
+    (id: string) => setNeedsYou((items) => items.filter((i) => i.id !== id)),
+    [],
+  );
+  const [muted, setMuted] = usePref("boss.muted", false);
+  const [quiet, setQuiet] = usePref("boss.quiet", false);
+  const silent = muted || quiet;
+
+  // Turning on mute or quiet stops any reply that is being spoken.
+  useEffect(() => {
+    if (silent) {
+      stopSpeaking().catch(() => {});
+      setState((s) => (s === "talking" ? "idle" : s));
+    }
+  }, [silent]);
+  useEffect(() => {
+    if (quiet) setBubble(null);
+  }, [quiet]);
 
   // On launch, continue the most recent chat if it was active in the last 30 minutes.
   useEffect(() => {
@@ -66,6 +112,7 @@ export default function App() {
   const startNewChat = useCallback(() => {
     setSession(newSession());
     setBubble(null);
+    stopSpeaking().catch(() => {});
   }, []);
 
   const ask = useCallback(
@@ -90,11 +137,18 @@ export default function App() {
       try {
         const reply = await askBoss(withUser, context);
         add({ role: "model", text: reply });
-        setBubble(reply);
+        if (!quiet) setBubble(reply);
         setState("talking");
-        // Talk for roughly as long as it takes to read the reply, then go idle.
-        const ms = Math.min(8000, 1500 + reply.length * 40);
-        talkTimer.current = window.setTimeout(() => setState("idle"), ms);
+        if (silent) {
+          // No voice: talk for roughly as long as it takes to read the reply.
+          const ms = Math.min(8000, 1500 + reply.length * 40);
+          talkTimer.current = window.setTimeout(() => setState("idle"), ms);
+        } else {
+          // Talk exactly while the voice speaks: Samantha for English, Vani for Tamil/Tanglish.
+          speak(reply, voiceFor(reply))
+            .catch((e) => console.error("Voice failed:", e))
+            .finally(() => setState((s) => (s === "talking" ? "idle" : s)));
+        }
       } catch (e) {
         add({ role: "model", text: String(e), error: true });
         setState("idle");
@@ -102,7 +156,7 @@ export default function App() {
         setPending(false);
       }
     },
-    [session],
+    [session, quiet, silent],
   );
 
   // Where the character window sat before the panel opened, so closing puts it back.
@@ -180,6 +234,31 @@ export default function App() {
     };
   }, [open, closePanel, pending]);
 
+  // Right-click: the native macOS menu.
+  const onContextMenu = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    pointer.current = null;
+    const menu = await Menu.new({
+      items: [
+        await CheckMenuItem.new({
+          text: "Mute voice",
+          checked: muted,
+          action: () => setMuted(!muted),
+        }),
+        await CheckMenuItem.new({
+          text: "Quiet mode",
+          checked: quiet,
+          action: () => setQuiet(!quiet),
+        }),
+        await PredefinedMenuItem.new({ item: "Separator" }),
+        await MenuItem.new({ text: "New chat", action: startNewChat }),
+        await PredefinedMenuItem.new({ item: "Separator" }),
+        await MenuItem.new({ text: "Quit The Boss", action: () => invoke("quit_app") }),
+      ],
+    });
+    await menu.popup();
+  };
+
   // Click opens/closes the panel; dragging moves the character without opening it.
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -210,6 +289,12 @@ export default function App() {
           onAsk={ask}
           sessionId={session.id}
           onNewChat={startNewChat}
+          needsYou={needsYou}
+          onResolve={resolveNeed}
+          muted={muted}
+          onMutedChange={setMuted}
+          quiet={quiet}
+          onQuietChange={setQuiet}
         />
       )}
       <div className="character-column" style={{ marginTop: open ? charTop : 0 }}>
@@ -218,9 +303,15 @@ export default function App() {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          title="Click to open Today · drag to move"
+          onContextMenu={onContextMenu}
+          title="Click to open Today · drag to move · right-click for menu"
         >
           <Elephant state={state} />
+          {needsYou.length > 0 && (
+            <span className="badge" aria-label={`${needsYou.length} items need you`}>
+              {needsYou.length}
+            </span>
+          )}
         </div>
         {open && bubble && (
           <div className="bubble" onClick={() => setBubble(null)} title="Click to dismiss">
