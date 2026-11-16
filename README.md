@@ -2,7 +2,7 @@
 
 A personal AI assistant that lives on the Mac as a small, clever elephant with round gold glasses and a tiny coral backpack. It takes instructions in English, Tamil or Tanglish, watches mail, calendar, reminders and Canvas, and speaks up when something needs attention.
 
-> Status: early V1. The elephant, the Today panel, real Canvas deadlines, typed chat and spoken replies work. Real calendar and mail come next.
+> Status: early V1. The elephant, the Today panel, real Canvas deadlines, typed chat, spoken replies and local memory work. Real calendar and mail come next.
 
 ## What works today
 
@@ -30,6 +30,12 @@ A personal AI assistant that lives on the Mac as a small, clever elephant with r
   - ✓ ticks and dismissals are remembered on your Mac. The Boss never changes anything in Canvas.
   - It checks on launch, every hour, and when you click **Refresh**.
 - **Chat**: ask in English, தமிழ் or Tanglish and The Boss replies in the same language. Answers show in a speech bubble under the elephant and in a thread in the panel. The Boss knows your Today list and the coming week's Canvas items, so "what's due this week?" works.
+- **Memory**: The Boss remembers short facts about you and uses them in answers.
+  - Say "remember that…" (or நினைவில் வை, or "nyabagam vechuko") and it saves the fact. It may also note lasting facts you mention, like "my exam is in Room 204".
+  - Tell it "actually it moved to Room 310" or "forget my exam room" to change or remove a fact. One fact can hold several names, like "Amma = Mom = அம்மா".
+  - Every change shows under the reply (🧠 Noted / Updated / Forgot) with an **Undo**.
+  - Open **Memory** in the panel to see everything, edit or delete a line, add one by hand, or **Forget everything**.
+  - It never saves passwords, PINs or codes, ID, bank or card numbers, or health details, even if you ask.
 - **Voice**: replies are read aloud with built-in macOS voices: Samantha for English, Vani for Tamil and Tanglish. The elephant talks while the voice plays.
 - **Badge**: a red count on the elephant shows how many "Needs you" items are waiting. It drops as you act on them.
 - **Right-click menu**: Mute voice, Quiet mode (no voice and no speech bubble), New chat and Quit. Mute and Quiet are remembered between launches.
@@ -41,9 +47,9 @@ A personal AI assistant that lives on the Mac as a small, clever elephant with r
 - Chat uses the **Google Gemini API free tier** (`gemini-3.8-flash`, falling back to `gemini-3.5-flash-lite` when it's busy). It's called from the Rust side.
 - Voice uses the macOS `say` command with the built-in **Samantha** and **Vani** voices. It's free and offline.
 - Canvas is read from its iCalendar (.ics) **Calendar Feed** link, fetched and parsed in Rust.
-- The Gemini key and the Canvas feed link are stored in the **macOS Keychain** and never sent back to the web view. Chats are JSON files in `~/Library/Application Support/com.ramyar29.theboss/chats/`.
+- The Gemini key and the Canvas feed link are stored in the **macOS Keychain** and never sent back to the web view. Chats are JSON files in `~/Library/Application Support/com.ramyar29.theboss/chats/`, and memories are in `memory.json` in the same folder.
 
-> On the free tier, Google may use what you send to improve its products. Each question sends the current chat, your Today list and the coming week's Canvas items, never past chats or your feed link.
+> On the free tier, Google may use what you send to improve its products. Each question sends the current chat, your Today list, the coming week's Canvas items and your memories, never past chats or your feed link.
 
 ## Run it
 
@@ -75,7 +81,7 @@ Every capability falls into one of three buckets:
 
 ## Roadmap
 
-- **V1:** ~~character window~~, ~~Today panel~~, ~~typed chat in English, Tamil and Tanglish~~, ~~badge~~, ~~right-click menu~~, ~~real read-only Canvas~~, real read-only calendar, proactive alerts, local memory.
+- **V1:** ~~character window~~, ~~Today panel~~, ~~typed chat in English, Tamil and Tanglish~~, ~~badge~~, ~~right-click menu~~, ~~real read-only Canvas~~, real read-only calendar, proactive alerts, ~~local memory~~.
 - **V2:** reminders, to-do tools and idea parking (with confirmation), mail checking, message drafting with hand-off, voice input, ~~spoken replies~~ (done early).
 - **V3:** plug in other apps through the Boss App Contract (MCP), smarter suggestions, daily digest, optional Android companion.
 
