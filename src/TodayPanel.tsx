@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiKeySettings } from "./ApiKeySettings";
+import {
+  canvasLabel,
+  DAYS_AHEAD,
+  itemTime,
+  itemWhen,
+  openCanvasLink,
+  splitByDay,
+  type CanvasItem,
+  type CanvasState,
+} from "./canvas";
+import { CanvasSettings } from "./CanvasSettings";
 import { detectLanguage } from "./language";
 import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
@@ -38,6 +49,7 @@ interface Props {
   onMutedChange: (v: boolean) => void;
   quiet: boolean;
   onQuietChange: (v: boolean) => void;
+  canvas: CanvasState;
 }
 
 export function TodayPanel({
@@ -55,6 +67,7 @@ export function TodayPanel({
   onMutedChange,
   quiet,
   onQuietChange,
+  canvas,
 }: Props) {
   const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
@@ -80,12 +93,47 @@ export function TodayPanel({
 
   const lang = detectLanguage(ask);
 
-  // What The Boss knows about today, sent with each question.
+  // Real Canvas items: today's go in the Today list; the next 7 days go under "Coming up".
+  const canvasDays = splitByDay(canvas.items);
+  type Row =
+    | { kind: "mock"; at: number; item: TodayItem & { done?: boolean } }
+    | { kind: "canvas"; at: number; item: CanvasItem };
+  const todayRows: Row[] = [
+    ...today.map((item): Row => ({ kind: "mock", at: item.at.getTime(), item })),
+    ...canvasDays.today.map((item): Row => ({ kind: "canvas", at: item.startMs, item })),
+  ].sort((a, b) => a.at - b.at);
+
+  const canvasLine = (i: CanvasItem) =>
+    `${i.kind === "assignment" ? "Canvas assignment due" : "Canvas course event"} · ${i.title}` +
+    `${i.course ? ` (${i.course})` : ""}${canvas.done.has(i.uid) ? " (marked done)" : ""}`;
+
+  // What The Boss knows about today and the coming week, sent with each question.
   const buildContext = () => {
     const lines = [`Now: ${dateFmt.format(new Date())}`, "", "Today:"];
-    for (const t of today) {
+    for (const r of todayRows) {
+      if (r.kind === "mock") {
+        const t = r.item;
+        lines.push(
+          `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} · ${t.title}${t.done ? " (done)" : ""}`,
+        );
+      } else {
+        lines.push(`- ${itemTime(r.item)} · ${canvasLine(r.item)}`);
+      }
+    }
+    lines.push("", `Canvas, the next ${DAYS_AHEAD} days after today:`);
+    if (canvas.connected === false) {
+      lines.push("- Canvas isn't connected yet (the user can add the feed link under Controls).");
+    } else if (canvas.error && !canvas.checkedAt) {
+      lines.push(`- Couldn't check Canvas: ${canvas.error}`);
+    } else if (canvasDays.later.length === 0) {
+      lines.push("- Nothing on Canvas.");
+    } else {
+      for (const i of canvasDays.later) lines.push(`- ${itemWhen(i)} · ${canvasLine(i)}`);
+    }
+    if (canvas.connected) {
       lines.push(
-        `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} · ${t.title}${t.done ? " (done)" : ""}`,
+        "(Canvas data covers only today and the next " +
+          `${DAYS_AHEAD} days. Calendar, reminder and to-do items are sample data for now.)`,
       );
     }
     if (needsYou.length) {
@@ -111,7 +159,7 @@ export function TodayPanel({
     <div className="panel" role="dialog" aria-label="Today">
       <header className="panel-header">
         <h1>Today</h1>
-        <span className="mock-tag">mock data</span>
+        <span className="mock-tag" title="Canvas is real; calendar, reminders and to-dos are sample data">mock: calendar, to-dos</span>
       </header>
 
       <div className="panel-scroll">
@@ -137,25 +185,54 @@ export function TodayPanel({
         <section>
           <h2>Today</h2>
           <ul className="today-list">
-            {today.map((t) => (
-              <li key={t.id} className={t.done ? "done" : ""}>
-                <span className="time">{timeFmt.format(t.at)}</span>
-                <span className="title">
-                  {t.title}
-                  <span className={`source source-${t.source}`}>{sourceLabel[t.source]}</span>
-                </span>
-                <span className="row-actions">
-                  <button title={t.done ? "Undo" : "Done"} onClick={() => markDone(t.id)}>
-                    {t.done ? "↺" : "✓"}
-                  </button>
-                  <button title="Snooze 1 hour" onClick={() => snooze(t.id)} disabled={t.done}>
-                    ⏰
-                  </button>
-                </span>
-              </li>
-            ))}
+            {todayRows.map((r) =>
+              r.kind === "mock" ? (
+                <li key={r.item.id} className={r.item.done ? "done" : ""}>
+                  <span className="time">{timeFmt.format(r.item.at)}</span>
+                  <span className="title">
+                    {r.item.title}
+                    <span className={`source source-${r.item.source}`}>
+                      {sourceLabel[r.item.source]}
+                    </span>
+                  </span>
+                  <span className="row-actions">
+                    <button title={r.item.done ? "Undo" : "Done"} onClick={() => markDone(r.item.id)}>
+                      {r.item.done ? "↺" : "✓"}
+                    </button>
+                    <button
+                      title="Snooze 1 hour"
+                      onClick={() => snooze(r.item.id)}
+                      disabled={r.item.done}
+                    >
+                      ⏰
+                    </button>
+                  </span>
+                </li>
+              ) : (
+                <CanvasRow key={r.item.uid} item={r.item} canvas={canvas} onCelebrate={onCelebrate} />
+              ),
+            )}
           </ul>
+          {canvas.connected === false && (
+            <p className="hint">Connect Canvas under Controls to see your real deadlines.</p>
+          )}
         </section>
+
+        {canvasDays.groups.length > 0 && (
+          <section>
+            <h2>Coming up</h2>
+            {canvasDays.groups.map((g) => (
+              <div key={g.label} className="day-group">
+                <h3>{g.label}</h3>
+                <ul className="today-list">
+                  {g.items.map((i) => (
+                    <CanvasRow key={i.uid} item={i} canvas={canvas} onCelebrate={onCelebrate} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        )}
 
         <section>
           <h2 className="h2-row">
@@ -219,6 +296,14 @@ export function TodayPanel({
         <section>
           <h2>Recently</h2>
           <ul className="recent">
+            {canvas.checkedAt && (
+              <li>
+                <span className="time">{timeFmt.format(canvas.checkedAt)}</span> Checked Canvas:{" "}
+                {canvasDays.today.length + canvasDays.later.length} item
+                {canvasDays.today.length + canvasDays.later.length === 1 ? "" : "s"} in the next{" "}
+                {DAYS_AHEAD} days
+              </li>
+            )}
             {mockRecently.map((r) => (
               <li key={r.id}>
                 <span className="time">{timeFmt.format(r.at)}</span> {r.text}
@@ -230,6 +315,7 @@ export function TodayPanel({
         <section>
           <h2>Controls</h2>
           <ApiKeySettings />
+          <CanvasSettings canvas={canvas} />
           <label className="toggle">
             <input type="checkbox" checked={muted} onChange={(e) => onMutedChange(e.target.checked)} />
             Mute voice
@@ -259,5 +345,46 @@ export function TodayPanel({
         </section>
       </div>
     </div>
+  );
+}
+
+/** One real Canvas item. Ticking it is remembered on this Mac only; Canvas itself is never changed. */
+function CanvasRow({
+  item,
+  canvas,
+  onCelebrate,
+}: {
+  item: CanvasItem;
+  canvas: CanvasState;
+  onCelebrate: () => void;
+}) {
+  const done = canvas.done.has(item.uid);
+  return (
+    <li className={done ? "done" : ""}>
+      <span className="time">{itemTime(item)}</span>
+      <span className="title">
+        {item.title}
+        <span className="source source-canvas">
+          {canvasLabel(item)}
+          {item.course ? ` · ${item.course}` : ""}
+        </span>
+      </span>
+      <span className="row-actions">
+        <button
+          title={done ? "Undo" : "Done"}
+          onClick={() => {
+            if (!done) onCelebrate();
+            canvas.toggleDone(item.uid);
+          }}
+        >
+          {done ? "↺" : "✓"}
+        </button>
+        {item.url && (
+          <button title="Open in Canvas" onClick={() => openCanvasLink(item.url!)}>
+            ↗
+          </button>
+        )}
+      </span>
+    </li>
   );
 }

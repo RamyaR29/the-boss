@@ -278,3 +278,10 @@ input[type="text"],
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .segmented button { text-transform: capitalize; padding: 4px 2px; font-size: 12px; }
 .segmented button.active { background: var(--accent); color: var(--accent-fg); }
+
+.day-group h3 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.day-group:first-of-type h3 { margin-top: 0; }

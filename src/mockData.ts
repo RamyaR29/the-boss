@@ -1,5 +1,5 @@
-// Fake data for the first slice. Nothing here talks to Canvas, calendar,
-// mail or reminders yet; real Check tools replace this in a later slice.
+// Fake data for calendar, reminders and to-dos. Canvas items are real now
+// (see canvas.ts); real Check tools replace the rest in a later slice.
 
 export type Source = "canvas" | "calendar" | "reminder" | "todo";
 
@@ -16,6 +16,8 @@ export interface NeedsYouItem {
   text: string;
   primary: string;
   secondary: string;
+  /** Set for alerts made from a real Canvas deadline. */
+  canvasUid?: string;
 }
 
 export interface RecentItem {
@@ -45,13 +47,6 @@ export const mockNeedsYou: NeedsYouItem[] = [
     primary: "Keep both",
     secondary: "Move study group",
   },
-  {
-    id: "n3",
-    kind: "alert",
-    text: "Databases quiz closes tonight at 11:59 pm and isn't started.",
-    primary: "Block 1 hour",
-    secondary: "Dismiss",
-  },
 ];
 
 export const mockToday: TodayItem[] = [
@@ -59,13 +54,9 @@ export const mockToday: TodayItem[] = [
   { id: "t2", source: "reminder", title: "Call Amma", at: todayAt(13, 30) },
   { id: "t3", source: "todo", title: "Buy printer paper", at: todayAt(15, 0) },
   { id: "t4", source: "calendar", title: "Study group", at: todayAt(18, 0) },
-  { id: "t5", source: "canvas", title: "Lab report draft due", at: todayAt(20, 0) },
-  { id: "t6", source: "canvas", title: "Databases quiz closes", at: todayAt(23, 59) },
 ];
 
 export const mockRecently: RecentItem[] = [
-  { id: "r1", at: todayAt(8, 30), text: "Checked Canvas: 2 new assignments" },
-  { id: "r2", at: todayAt(9, 2), text: "Reminded you: lab report draft due tonight" },
   { id: "r3", at: todayAt(9, 15), text: "Noticed a calendar overlap at 6:00 pm" },
 ];
 

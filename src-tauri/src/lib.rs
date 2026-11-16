@@ -1,3 +1,4 @@
+mod canvas;
 mod chat;
 mod keychain;
 mod sessions;
@@ -16,6 +17,10 @@ pub fn run() {
             keychain::has_api_key,
             keychain::save_api_key,
             keychain::delete_api_key,
+            canvas::save_canvas_feed,
+            canvas::delete_canvas_feed,
+            canvas::fetch_canvas,
+            canvas::open_canvas_link,
             chat::ask,
             sessions::save_session,
             sessions::load_session,

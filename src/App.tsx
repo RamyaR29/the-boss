@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   currentMonitor,
   getCurrentWindow,
@@ -20,7 +20,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { Elephant, type CharacterState } from "./Elephant";
 import { voiceFor } from "./language";
-import { mockNeedsYou } from "./mockData";
+import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
+import { mockNeedsYou, type NeedsYouItem } from "./mockData";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
 import "./Elephant.css";
@@ -106,13 +107,43 @@ export default function App() {
     flash("celebrating", 2200);
   }, [flash, touch]);
 
-  const [needsYou, setNeedsYou] = useState(mockNeedsYou);
+  // Real Canvas deadlines, refreshed hourly even while the panel is closed.
+  const canvas = useCanvas();
+  // A clock that ticks every minute, so deadlines move into the 24-hour alert window on time.
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const canvasAlerts = useMemo<NeedsYouItem[]>(
+    () =>
+      dueSoon(canvas, now).map((i) => ({
+        id: `canvas:${i.uid}`,
+        canvasUid: i.uid,
+        kind: "alert",
+        text: `${i.title}${i.course ? ` (${i.course})` : ""} is due ${dayLabel(new Date(i.startMs)).toLowerCase()}${i.allDay ? "" : ` at ${itemTime(i)}`}.`,
+        primary: i.url ? "Open in Canvas" : "Got it",
+        secondary: "Dismiss",
+      })),
+    [canvas, now],
+  );
+
+  const [mockNeeds, setMockNeeds] = useState(mockNeedsYou);
+  const needsYou = useMemo(() => [...canvasAlerts, ...mockNeeds], [canvasAlerts, mockNeeds]);
   const resolveNeed = useCallback(
     (id: string, accepted: boolean) => {
-      setNeedsYou((items) => items.filter((i) => i.id !== id));
+      const alert = canvasAlerts.find((a) => a.id === id);
+      if (alert?.canvasUid) {
+        const item = canvas.items.find((i) => i.uid === alert.canvasUid);
+        // "Open in Canvas" keeps the alert until you tick the item done or dismiss it.
+        if (accepted && item?.url) openCanvasLink(item.url);
+        else canvas.dismiss(alert.canvasUid);
+        return;
+      }
+      setMockNeeds((items) => items.filter((i) => i.id !== id));
       if (accepted) celebrate();
     },
-    [celebrate],
+    [celebrate, canvas, canvasAlerts],
   );
   const [muted, setMuted] = usePref("boss.muted", false);
   const [quiet, setQuiet] = usePref("boss.quiet", false);
@@ -378,6 +409,7 @@ export default function App() {
           onNewChat={startNewChat}
           needsYou={needsYou}
           onResolve={resolveNeed}
+          canvas={canvas}
           muted={muted}
           onMutedChange={setMuted}
           quiet={quiet}
