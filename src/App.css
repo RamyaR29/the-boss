@@ -285,3 +285,29 @@ input[type="text"],
   font-weight: 600;
 }
 .day-group:first-of-type h3 { margin-top: 0; }
+
+/* ---------- memory ---------- */
+.msg-wrap { display: flex; flex-direction: column; gap: 3px; }
+.memory-note {
+  align-self: flex-start;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 85%;
+}
+.memory-note.undone { text-decoration: line-through; }
+.memory-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.memory-list { margin-bottom: 8px; }
+.memory-text { flex: 1; line-height: 1.35; }
+.confirm-row { align-items: center; margin-top: 8px; font-size: 12px; }
+.confirm-row span { flex: 1; }
+.btn-danger { background: var(--alert); color: #fff; border-color: transparent; }
+section > button.link { margin-top: 8px; }

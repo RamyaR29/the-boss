@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { MemoryChange } from "./memory";
 
 export interface ChatMessage {
   id: number;
@@ -6,17 +7,24 @@ export interface ChatMessage {
   text: string;
   /** True when this "model" message is an error shown to the user, not a real reply. */
   error?: boolean;
+  /** Memory changes that came with this reply. */
+  memory?: MemoryChange[];
 }
 
 /** How many earlier messages to send with each question. */
 const HISTORY_LIMIT = 12;
 
-export async function askBoss(messages: ChatMessage[], context: string): Promise<string> {
+export interface AskReply {
+  text: string;
+  memory: MemoryChange[];
+}
+
+export async function askBoss(messages: ChatMessage[], context: string): Promise<AskReply> {
   const history = messages
     .filter((m) => !m.error)
     .slice(-HISTORY_LIMIT)
     .map(({ role, text }) => ({ role, text }));
-  return invoke<string>("ask", { history, context });
+  return invoke<AskReply>("ask", { history, context });
 }
 
 // ---------- sessions (saved as local files by the Rust side) ----------

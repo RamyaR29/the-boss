@@ -1,6 +1,7 @@
 mod canvas;
 mod chat;
 mod keychain;
+mod memory;
 mod sessions;
 mod voice;
 
@@ -22,6 +23,12 @@ pub fn run() {
             canvas::fetch_canvas,
             canvas::open_canvas_link,
             chat::ask,
+            memory::list_memories,
+            memory::add_memory,
+            memory::update_memory,
+            memory::delete_memory,
+            memory::restore_memory,
+            memory::clear_memories,
             sessions::save_session,
             sessions::load_session,
             sessions::list_sessions,

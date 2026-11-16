@@ -11,6 +11,8 @@ import {
   type CanvasState,
 } from "./canvas";
 import { CanvasSettings } from "./CanvasSettings";
+import { changeLabel, type MemoryState } from "./memory";
+import { MemorySection } from "./MemorySection";
 import { detectLanguage } from "./language";
 import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
@@ -50,6 +52,8 @@ interface Props {
   quiet: boolean;
   onQuietChange: (v: boolean) => void;
   canvas: CanvasState;
+  memory: MemoryState;
+  onUndoMemory: (messageId: number, index: number) => Promise<void>;
 }
 
 export function TodayPanel({
@@ -68,6 +72,8 @@ export function TodayPanel({
   quiet,
   onQuietChange,
   canvas,
+  memory,
+  onUndoMemory,
 }: Props) {
   const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
@@ -246,8 +252,22 @@ export function TodayPanel({
           {(messages.length > 0 || pending) && (
             <div className="thread">
               {messages.map((m) => (
-                <div key={m.id} className={`msg msg-${m.role}${m.error ? " msg-error" : ""}`}>
-                  {m.text}
+                <div key={m.id} className="msg-wrap">
+                  <div className={`msg msg-${m.role}${m.error ? " msg-error" : ""}`}>{m.text}</div>
+                  {m.memory?.map((c, i) => (
+                    <div key={i} className={`memory-note${c.undone ? " undone" : ""}`}>
+                      🧠 {c.undone ? "Undone: " : ""}
+                      {changeLabel(c)}
+                      {c.kind !== "skipped" && !c.undone && (
+                        <button
+                          className="link"
+                          onClick={() => onUndoMemory(m.id, i).catch((e) => console.error(e))}
+                        >
+                          Undo
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ))}
               {pending && <div className="msg msg-model msg-pending">…</div>}
@@ -272,6 +292,8 @@ export function TodayPanel({
         </section>
 
         <PastChats currentId={sessionId} />
+
+        <MemorySection memory={memory} />
 
         <section>
           <h2>Park an idea</h2>

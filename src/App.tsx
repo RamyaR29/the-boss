@@ -21,6 +21,7 @@ import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/a
 import { Elephant, type CharacterState } from "./Elephant";
 import { voiceFor } from "./language";
 import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
+import { undoChange, useMemory } from "./memory";
 import { mockNeedsYou, type NeedsYouItem } from "./mockData";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
@@ -106,6 +107,9 @@ export default function App() {
     touch();
     flash("celebrating", 2200);
   }, [flash, touch]);
+
+  // What The Boss remembers about the user (memory.json on this Mac).
+  const memory = useMemory();
 
   // Real Canvas deadlines, refreshed hourly even while the panel is closed.
   const canvas = useCanvas();
@@ -247,8 +251,9 @@ export default function App() {
         if (stateRef.current === "talking") flash("happy", 1800);
       };
       try {
-        const reply = await askBoss(withUser, context);
-        add({ role: "model", text: reply });
+        const { text: reply, memory: changes } = await askBoss(withUser, context);
+        add({ role: "model", text: reply, ...(changes.length ? { memory: changes } : {}) });
+        if (changes.length) memory.reload();
         if (!quiet) setBubble(reply);
         setState("talking");
         if (silent) {
@@ -269,7 +274,26 @@ export default function App() {
         lastActivity.current = Date.now();
       }
     },
-    [session, quiet, silent, touch, flash],
+    [session, quiet, silent, touch, flash, memory],
+  );
+
+  /** Undo one memory change shown under a reply, and mark it undone in the chat. */
+  const undoMemory = useCallback(
+    async (messageId: number, index: number) => {
+      const change = session.messages.find((m) => m.id === messageId)?.memory?.[index];
+      if (!change || change.undone) return;
+      await undoChange(change);
+      await memory.reload();
+      setSession((s) => ({
+        ...s,
+        messages: s.messages.map((m) =>
+          m.id === messageId && m.memory
+            ? { ...m, memory: m.memory.map((c, i) => (i === index ? { ...c, undone: true } : c)) }
+            : m,
+        ),
+      }));
+    },
+    [session, memory],
   );
 
   // Where the character window sat before the panel opened, so closing puts it back.
@@ -410,6 +434,8 @@ export default function App() {
           needsYou={needsYou}
           onResolve={resolveNeed}
           canvas={canvas}
+          memory={memory}
+          onUndoMemory={undoMemory}
           muted={muted}
           onMutedChange={setMuted}
           quiet={quiet}
