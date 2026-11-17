@@ -25,6 +25,8 @@ keyring = { version = "3", features = ["apple-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 chrono = "0.4.45"
 chrono-tz = "0.10.4"
+rusqlite = { version = "0.43.0", features = ["bundled"] }
+mail-parser = "1.0.1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

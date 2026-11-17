@@ -20,6 +20,8 @@ import {
   type CanvasState,
 } from "./canvas";
 import { CanvasSettings } from "./CanvasSettings";
+import { senderName, type MailState } from "./mail";
+import { MailSettings } from "./MailSettings";
 import { changeLabel, type MemoryState } from "./memory";
 import { MemorySection } from "./MemorySection";
 import { detectLanguage } from "./language";
@@ -73,6 +75,7 @@ interface Props {
   canvas: CanvasState;
   calendar: CalendarState;
   reminders: RemindersState;
+  mail: MailState;
   memory: MemoryState;
   onUndoMemory: (messageId: number, index: number) => Promise<void>;
   onUndoReminder: (messageId: number, index: number) => Promise<void>;
@@ -96,6 +99,7 @@ export function TodayPanel({
   canvas,
   calendar,
   reminders,
+  mail,
   memory,
   onUndoMemory,
   onUndoReminder,
@@ -214,6 +218,18 @@ export function TodayPanel({
     for (const r of todos.slice(0, 100)) lines.push(`- ${reminderLine(r)}`);
     if (todos.length === 0) lines.push("- None.");
     if (todos.length > 100) lines.push(`- (${todos.length - 100} more not shown)`);
+    // Recent mail: the last 3 days, newest first, with The Boss's one-line summaries.
+    const recentMail = mail.items.filter((m) => m.dateMs > now.getTime() - 3 * 86_400_000).slice(0, 40);
+    lines.push("", "Recent mail (last 3 days, newest first):");
+    for (const m of recentMail) {
+      const flag = m.needsAttention ? (m.done ? " (needed the user; marked done)" : " (needs the user)") : "";
+      lines.push(
+        `- ${whenFmt.format(m.dateMs)} · [${m.key}] · From ${m.from} · ${m.subject}${flag}` +
+          `${m.summary ? ` · ${m.summary}` : ""}` +
+          `${m.reminders.length ? ` · reminders added: ${m.reminders.map((r) => r.title).join(", ")}` : ""}`,
+      );
+    }
+    if (recentMail.length === 0) lines.push("- None.");
     lines.push("", "Sources:");
     if (canvas.connected === false) {
       lines.push("- Canvas isn't connected yet (the user can add the feed link under Controls).");
@@ -240,6 +256,11 @@ export function TodayPanel({
         "- Reminders aren't connected yet, so you can't create or read reminders (the user can allow access under Controls).",
       );
     }
+    lines.push(
+      mail.status === "ok"
+        ? "- Mail: real (Apple Mail inbox, all accounts), checked hourly."
+        : "- Mail: not checked right now (The Boss may not have Full Disk Access yet).",
+    );
     if (needsYou.length) {
       lines.push("", "Waiting on the user:");
       for (const n of needsYou) lines.push(`- ${n.text}`);
@@ -441,8 +462,33 @@ export function TodayPanel({
 
         <section>
           <h2>Recently</h2>
-          {!canvas.checkedAt && !calendar.checkedAt && <p className="hint">Nothing yet.</p>}
+          {!canvas.checkedAt && !calendar.checkedAt && !mail.lastChecked && (
+            <p className="hint">Nothing yet.</p>
+          )}
           <ul className="recent">
+            {mail.lastChecked && (
+              <li>
+                <span className="time">{timeFmt.format(mail.lastChecked)}</span> Checked mail:{" "}
+                {mail.newCount} new, {mail.attention.length} need you
+              </li>
+            )}
+            {mail.items
+              .filter((m) => m.reminders.length > 0 && m.dateMs > now.getTime() - 7 * 86_400_000)
+              .slice(0, 8)
+              .flatMap((m) =>
+                m.reminders.map((r) => (
+                  <li key={`${m.key}:${r.id}`}>
+                    🔔 Added from {senderName(m.from)}'s email: {r.title}
+                    {r.dueMs !== null ? ` · ${dueText(r)}` : ""}{" "}
+                    <button
+                      className="link"
+                      onClick={() => mail.undoReminder(m.key, r.id).catch((e) => console.error(e))}
+                    >
+                      Undo
+                    </button>
+                  </li>
+                )),
+              )}
             {canvas.checkedAt && (
               <li>
                 <span className="time">{timeFmt.format(canvas.checkedAt)}</span> Checked Canvas:{" "}
@@ -465,6 +511,7 @@ export function TodayPanel({
           <h2>Controls</h2>
           <ApiKeySettings />
           <CanvasSettings canvas={canvas} />
+          <MailSettings mail={mail} />
           <AccessSettings
             label="Mac Calendar"
             noun="calendars"

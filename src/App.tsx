@@ -23,6 +23,7 @@ import { voiceFor } from "./language";
 import { useCalendar } from "./calendar";
 import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
 import { undoChange, useMemory } from "./memory";
+import { senderName, useMail } from "./mail";
 import type { NeedsYouItem } from "./needsYou";
 import {
   deleteReminder,
@@ -133,6 +134,8 @@ export default function App() {
   useEffect(() => {
     if (open) refreshReminders();
   }, [open, refreshReminders]);
+  // New inbox mail in Apple Mail, checked hourly; reminders it creates show up in Reminders.
+  const mail = useMail(refreshReminders);
   // Deletes chat asked for, waiting for the user's yes in Needs you.
   const [pendingDeletes, setPendingDeletes] = useState<Reminder[]>([]);
 
@@ -183,7 +186,22 @@ export default function App() {
     [pendingDeletes, reminders, now],
   );
 
-  const needsYou = useMemo(() => [...reminderCards, ...canvasAlerts], [reminderCards, canvasAlerts]);
+  const mailCards = useMemo<NeedsYouItem[]>(
+    () =>
+      mail.attention.map((m) => ({
+        id: `mail:${m.key}`,
+        kind: m.urgent ? "alert" : "question",
+        text: `✉️ ${senderName(m.from)}: ${m.summary || m.subject}`,
+        primary: "Open in Mail",
+        secondary: "Done",
+      })),
+    [mail.attention],
+  );
+
+  const needsYou = useMemo(
+    () => [...reminderCards, ...mailCards, ...canvasAlerts],
+    [reminderCards, mailCards, canvasAlerts],
+  );
   const resolveNeed = useCallback(
     async (id: string, accepted: boolean) => {
       if (id.startsWith("rdelete:")) {
@@ -193,6 +211,13 @@ export default function App() {
           await deleteReminder(r.id).catch((e) => console.error("Delete failed:", e));
           await reminders.refresh();
         }
+        return;
+      }
+      if (id.startsWith("mail:")) {
+        const key = id.slice("mail:".length);
+        // "Open in Mail" keeps the card until you click Done.
+        if (accepted) await mail.open(key);
+        else await mail.markDone(key, true);
         return;
       }
       if (id.startsWith("roverdue:")) {
@@ -212,7 +237,7 @@ export default function App() {
         else canvas.dismiss(alert.canvasUid);
       }
     },
-    [canvas, canvasAlerts, pendingDeletes, reminders, celebrate],
+    [canvas, canvasAlerts, pendingDeletes, reminders, celebrate, mail],
   );
   const [muted, setMuted] = usePref("boss.muted", false);
   const [quiet, setQuiet] = usePref("boss.quiet", false);
@@ -539,6 +564,7 @@ export default function App() {
           canvas={canvas}
           calendar={calendar}
           reminders={reminders}
+          mail={mail}
           memory={memory}
           onUndoMemory={undoMemory}
           onUndoReminder={undoReminder}

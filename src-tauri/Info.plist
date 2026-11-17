@@ -10,5 +10,7 @@
   <string>The Boss shows your reminders and to-dos in Today and adds, completes or reschedules them when you ask.</string>
   <key>NSRemindersUsageDescription</key>
   <string>The Boss shows your reminders and to-dos in Today and adds, completes or reschedules them when you ask.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>The Boss reads new emails in Apple Mail to show what needs you and add reminders for deadlines. It never sends, moves or deletes mail.</string>
 </dict>
 </plist>

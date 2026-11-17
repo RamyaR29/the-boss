@@ -3,6 +3,7 @@ mod canvas;
 mod chat;
 mod keychain;
 mod lookup;
+mod mail;
 mod memory;
 mod reminders;
 mod sessions;
@@ -30,6 +31,12 @@ pub fn run() {
             canvas::fetch_canvas,
             canvas::open_canvas_link,
             chat::ask,
+            mail::mail_state,
+            mail::check_mail,
+            mail::mark_mail_done,
+            mail::forget_mail_reminder,
+            mail::open_mail,
+            mail::open_full_disk_settings,
             memory::list_memories,
             memory::add_memory,
             memory::update_memory,
