@@ -311,3 +311,4 @@ input[type="text"],
 .confirm-row span { flex: 1; }
 .btn-danger { background: var(--alert); color: #fff; border-color: transparent; }
 section > button.link { margin-top: 8px; }
+.clash { color: var(--alert); cursor: help; }

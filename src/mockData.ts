@@ -1,5 +1,5 @@
-// Fake data for calendar, reminders and to-dos. Canvas items are real now
-// (see canvas.ts); real Check tools replace the rest in a later slice.
+// Fake data for reminders and to-dos. Canvas (canvas.ts) and the Mac Calendar
+// (calendar.ts) are real now; real Check tools replace the rest in a later slice.
 
 export type Source = "canvas" | "calendar" | "reminder" | "todo";
 
@@ -40,24 +40,14 @@ export const mockNeedsYou: NeedsYouItem[] = [
     primary: "Approve",
     secondary: "Cancel",
   },
-  {
-    id: "n2",
-    kind: "question",
-    text: "Study group at 6:00 pm overlaps your quiz window. Keep both?",
-    primary: "Keep both",
-    secondary: "Move study group",
-  },
 ];
 
 export const mockToday: TodayItem[] = [
-  { id: "t1", source: "calendar", title: "Data Structures lecture", at: todayAt(10, 0) },
   { id: "t2", source: "reminder", title: "Call Amma", at: todayAt(13, 30) },
   { id: "t3", source: "todo", title: "Buy printer paper", at: todayAt(15, 0) },
-  { id: "t4", source: "calendar", title: "Study group", at: todayAt(18, 0) },
 ];
 
 export const mockRecently: RecentItem[] = [
-  { id: "r3", at: todayAt(9, 15), text: "Noticed a calendar overlap at 6:00 pm" },
 ];
 
 export const sourceLabel: Record<Source, string> = {

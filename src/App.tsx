@@ -20,6 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { Elephant, type CharacterState } from "./Elephant";
 import { voiceFor } from "./language";
+import { useCalendar } from "./calendar";
 import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
 import { undoChange, useMemory } from "./memory";
 import { mockNeedsYou, type NeedsYouItem } from "./mockData";
@@ -110,6 +111,13 @@ export default function App() {
 
   // What The Boss remembers about the user (memory.json on this Mac).
   const memory = useMemory();
+
+  // Events from the Mac's Calendar app, refreshed every 5 minutes and whenever the panel opens.
+  const calendar = useCalendar();
+  const refreshCalendar = calendar.refresh;
+  useEffect(() => {
+    if (open) refreshCalendar();
+  }, [open, refreshCalendar]);
 
   // Real Canvas deadlines, refreshed hourly even while the panel is closed.
   const canvas = useCanvas();
@@ -251,7 +259,7 @@ export default function App() {
         if (stateRef.current === "talking") flash("happy", 1800);
       };
       try {
-        const { text: reply, memory: changes } = await askBoss(withUser, context);
+        const { text: reply, memory: changes } = await askBoss(withUser, context, [...calendar.hidden]);
         add({ role: "model", text: reply, ...(changes.length ? { memory: changes } : {}) });
         if (changes.length) memory.reload();
         if (!quiet) setBubble(reply);
@@ -274,7 +282,7 @@ export default function App() {
         lastActivity.current = Date.now();
       }
     },
-    [session, quiet, silent, touch, flash, memory],
+    [session, quiet, silent, touch, flash, memory, calendar.hidden],
   );
 
   /** Undo one memory change shown under a reply, and mark it undone in the chat. */
@@ -434,6 +442,7 @@ export default function App() {
           needsYou={needsYou}
           onResolve={resolveNeed}
           canvas={canvas}
+          calendar={calendar}
           memory={memory}
           onUndoMemory={undoMemory}
           muted={muted}

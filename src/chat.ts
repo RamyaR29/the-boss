@@ -19,12 +19,17 @@ export interface AskReply {
   memory: MemoryChange[];
 }
 
-export async function askBoss(messages: ChatMessage[], context: string): Promise<AskReply> {
+export async function askBoss(
+  messages: ChatMessage[],
+  context: string,
+  /** Calendars the user hid; chat lookups skip them too. */
+  hiddenCalendars: string[] = [],
+): Promise<AskReply> {
   const history = messages
     .filter((m) => !m.error)
     .slice(-HISTORY_LIMIT)
     .map(({ role, text }) => ({ role, text }));
-  return invoke<AskReply>("ask", { history, context });
+  return invoke<AskReply>("ask", { history, context, hiddenCalendars });
 }
 
 // ---------- sessions (saved as local files by the Rust side) ----------

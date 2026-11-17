@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiKeySettings } from "./ApiKeySettings";
 import {
+  eventTime,
+  eventUntil,
+  findClashes,
+  type CalendarEvent,
+  type CalendarState,
+} from "./calendar";
+import { CalendarSettings } from "./CalendarSettings";
+import {
   canvasLabel,
   DAYS_AHEAD,
+  dayLabel,
   itemTime,
   itemWhen,
   openCanvasLink,
-  splitByDay,
+  startOfDay,
   type CanvasItem,
   type CanvasState,
 } from "./canvas";
@@ -26,12 +35,20 @@ import {
 } from "./mockData";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-
+const whenFmt = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+const dayOnlyFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
   month: "long",
   day: "numeric",
+  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -52,6 +69,7 @@ interface Props {
   quiet: boolean;
   onQuietChange: (v: boolean) => void;
   canvas: CanvasState;
+  calendar: CalendarState;
   memory: MemoryState;
   onUndoMemory: (messageId: number, index: number) => Promise<void>;
 }
@@ -72,6 +90,7 @@ export function TodayPanel({
   quiet,
   onQuietChange,
   canvas,
+  calendar,
   memory,
   onUndoMemory,
 }: Props) {
@@ -99,54 +118,158 @@ export function TodayPanel({
 
   const lang = detectLanguage(ask);
 
-  // Real Canvas items: today's go in the Today list; the next 7 days go under "Coming up".
-  const canvasDays = splitByDay(canvas.items);
+  // Everything with a time, for today and the next 7 days: Canvas, Mac Calendar and the
+  // remaining mock reminders and to-dos. Today's go in Today; later days under "Coming up".
   type Row =
-    | { kind: "mock"; at: number; item: TodayItem & { done?: boolean } }
-    | { kind: "canvas"; at: number; item: CanvasItem };
-  const todayRows: Row[] = [
-    ...today.map((item): Row => ({ kind: "mock", at: item.at.getTime(), item })),
-    ...canvasDays.today.map((item): Row => ({ kind: "canvas", at: item.startMs, item })),
-  ].sort((a, b) => a.at - b.at);
+    | { kind: "mock"; day: number; at: number; allDay: boolean; item: TodayItem & { done?: boolean } }
+    | { kind: "canvas"; day: number; at: number; allDay: boolean; item: CanvasItem }
+    | { kind: "event"; day: number; at: number; allDay: boolean; item: CalendarEvent };
+  const now = new Date();
+  const today0 = startOfDay(now).getTime();
+  const endDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + DAYS_AHEAD + 1).getTime();
+  const dayOf = (ms: number) => startOfDay(new Date(ms)).getTime();
+  const rows: Row[] = [
+    ...today.map((item): Row => {
+      const at = item.at.getTime();
+      return { kind: "mock", day: dayOf(at), at, allDay: false, item };
+    }),
+    ...canvas.items.map(
+      (item): Row => ({ kind: "canvas", day: dayOf(item.startMs), at: item.startMs, allDay: item.allDay, item }),
+    ),
+    ...calendar.events.map((item): Row => {
+      // An event that started before today but is still going shows in Today.
+      const ongoing = item.startMs < today0 && item.endMs > today0;
+      return {
+        kind: "event",
+        day: ongoing ? today0 : dayOf(item.startMs),
+        at: item.startMs,
+        allDay: item.allDay,
+        item,
+      };
+    }),
+  ]
+    .filter((r) => r.day >= today0 && r.day < endDay)
+    // By day, all-day items first, then by time.
+    .sort((a, b) => a.day - b.day || Number(b.allDay) - Number(a.allDay) || a.at - b.at);
+  const todayRows = rows.filter((r) => r.day === today0);
+  const laterRows = rows.filter((r) => r.day > today0);
+  const groups: { label: string; rows: Row[] }[] = [];
+  for (const r of laterRows) {
+    const label = dayLabel(new Date(r.day), now);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.rows.push(r);
+    else groups.push({ label, rows: [r] });
+  }
+
+  // Overlapping events, and Canvas deadlines that fall inside an event, get a ⚠ mark.
+  const clashes = findClashes(
+    calendar.events,
+    canvas.items
+      .filter((i) => i.kind === "assignment" && !i.allDay)
+      .map((i) => ({ uid: i.uid, title: i.title, atMs: i.startMs })),
+  );
+  const clashNote = (uid: string) => {
+    const with_ = clashes.get(uid);
+    return with_ ? `Overlaps ${with_.join(", ")}` : "";
+  };
 
   const canvasLine = (i: CanvasItem) =>
     `${i.kind === "assignment" ? "Canvas assignment due" : "Canvas course event"} · ${i.title}` +
     `${i.course ? ` (${i.course})` : ""}${canvas.done.has(i.uid) ? " (marked done)" : ""}`;
 
+  const eventWhen = (e: CalendarEvent, withDay: boolean) => {
+    if (e.allDay) return withDay ? `${dayOnlyFmt.format(e.startMs)}, all day` : "All day";
+    const start = withDay ? whenFmt.format(e.startMs) : timeFmt.format(e.startMs);
+    return `${start}–${timeFmt.format(e.endMs)}`;
+  };
+
+  // One line of context for Gemini.
+  const rowLine = (r: Row, withDay: boolean) => {
+    if (r.kind === "mock") {
+      const t = r.item;
+      return `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} (sample) · ${t.title}${t.done ? " (done)" : ""}`;
+    }
+    const clash = clashNote(r.item.uid);
+    const tail = clash ? ` (${clash})` : "";
+    if (r.kind === "canvas") {
+      return `- ${withDay ? itemWhen(r.item) : itemTime(r.item)} · ${canvasLine(r.item)}${tail}`;
+    }
+    const e = r.item;
+    return (
+      `- ${eventWhen(e, withDay)} · Calendar event (${calendar.calendarTitle(e.calendarId)}) · ${e.title}` +
+      `${e.location ? ` @ ${e.location}` : ""}${tail}`
+    );
+  };
+
   // What The Boss knows about today and the coming week, sent with each question.
   const buildContext = () => {
     const lines = [`Now: ${dateFmt.format(new Date())}`, "", "Today:"];
-    for (const r of todayRows) {
-      if (r.kind === "mock") {
-        const t = r.item;
-        lines.push(
-          `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} · ${t.title}${t.done ? " (done)" : ""}`,
-        );
-      } else {
-        lines.push(`- ${itemTime(r.item)} · ${canvasLine(r.item)}`);
-      }
-    }
-    lines.push("", `Canvas, the next ${DAYS_AHEAD} days after today:`);
+    for (const r of todayRows) lines.push(rowLine(r, false));
+    if (todayRows.length === 0) lines.push("- Nothing.");
+    lines.push("", `The next ${DAYS_AHEAD} days after today:`);
+    for (const r of laterRows) lines.push(rowLine(r, true));
+    if (laterRows.length === 0) lines.push("- Nothing.");
+    lines.push("", "Sources:");
     if (canvas.connected === false) {
       lines.push("- Canvas isn't connected yet (the user can add the feed link under Controls).");
     } else if (canvas.error && !canvas.checkedAt) {
       lines.push(`- Couldn't check Canvas: ${canvas.error}`);
-    } else if (canvasDays.later.length === 0) {
-      lines.push("- Nothing on Canvas.");
     } else {
-      for (const i of canvasDays.later) lines.push(`- ${itemWhen(i)} · ${canvasLine(i)}`);
+      lines.push(`- Canvas: real, today and the next ${DAYS_AHEAD} days.`);
     }
-    if (canvas.connected) {
-      lines.push(
-        "(Canvas data covers only today and the next " +
-          `${DAYS_AHEAD} days. Calendar, reminder and to-do items are sample data for now.)`,
-      );
+    if (calendar.access === "granted") {
+      lines.push(`- Mac Calendar: real, today and the next ${DAYS_AHEAD} days.`);
+    } else {
+      lines.push("- Mac Calendar isn't connected yet (the user can allow access under Controls).");
     }
+    lines.push("- Reminders and to-dos are sample data for now.");
     if (needsYou.length) {
       lines.push("", "Waiting on the user:");
       for (const n of needsYou) lines.push(`- ${n.text}`);
     }
     return lines.join("\n");
+  };
+
+  const renderRow = (r: Row) => {
+    if (r.kind === "canvas") {
+      return (
+        <CanvasRow
+          key={r.item.uid}
+          item={r.item}
+          canvas={canvas}
+          onCelebrate={onCelebrate}
+          clash={clashNote(r.item.uid)}
+        />
+      );
+    }
+    if (r.kind === "event") {
+      return (
+        <EventRow
+          key={r.item.uid}
+          event={r.item}
+          calendarTitle={calendar.calendarTitle(r.item.calendarId)}
+          clash={clashNote(r.item.uid)}
+        />
+      );
+    }
+    const t = r.item;
+    return (
+      <li key={t.id} className={t.done ? "done" : ""}>
+        <span className="time">{timeFmt.format(t.at)}</span>
+        <span className="title">
+          {t.title}
+          <span className={`source source-${t.source}`}>{sourceLabel[t.source]}</span>
+        </span>
+        <span className="row-actions">
+          <button title={t.done ? "Undo" : "Done"} onClick={() => markDone(t.id)}>
+            {t.done ? "↺" : "✓"}
+          </button>
+          <button title="Snooze 1 hour" onClick={() => snooze(t.id)} disabled={t.done}>
+            ⏰
+          </button>
+        </span>
+      </li>
+    );
   };
 
   const send = () => {
@@ -165,7 +288,7 @@ export function TodayPanel({
     <div className="panel" role="dialog" aria-label="Today">
       <header className="panel-header">
         <h1>Today</h1>
-        <span className="mock-tag" title="Canvas is real; calendar, reminders and to-dos are sample data">mock: calendar, to-dos</span>
+        <span className="mock-tag" title="Canvas and Calendar are real; reminders and to-dos are sample data">mock: reminders, to-dos</span>
       </header>
 
       <div className="panel-scroll">
@@ -190,51 +313,22 @@ export function TodayPanel({
 
         <section>
           <h2>Today</h2>
-          <ul className="today-list">
-            {todayRows.map((r) =>
-              r.kind === "mock" ? (
-                <li key={r.item.id} className={r.item.done ? "done" : ""}>
-                  <span className="time">{timeFmt.format(r.item.at)}</span>
-                  <span className="title">
-                    {r.item.title}
-                    <span className={`source source-${r.item.source}`}>
-                      {sourceLabel[r.item.source]}
-                    </span>
-                  </span>
-                  <span className="row-actions">
-                    <button title={r.item.done ? "Undo" : "Done"} onClick={() => markDone(r.item.id)}>
-                      {r.item.done ? "↺" : "✓"}
-                    </button>
-                    <button
-                      title="Snooze 1 hour"
-                      onClick={() => snooze(r.item.id)}
-                      disabled={r.item.done}
-                    >
-                      ⏰
-                    </button>
-                  </span>
-                </li>
-              ) : (
-                <CanvasRow key={r.item.uid} item={r.item} canvas={canvas} onCelebrate={onCelebrate} />
-              ),
-            )}
-          </ul>
+          <ul className="today-list">{todayRows.map(renderRow)}</ul>
           {canvas.connected === false && (
             <p className="hint">Connect Canvas under Controls to see your real deadlines.</p>
           )}
+          {calendar.access !== null && calendar.access !== "granted" && (
+            <p className="hint">Allow calendar access under Controls to see your real events.</p>
+          )}
         </section>
 
-        {canvasDays.groups.length > 0 && (
+        {groups.length > 0 && (
           <section>
             <h2>Coming up</h2>
-            {canvasDays.groups.map((g) => (
+            {groups.map((g) => (
               <div key={g.label} className="day-group">
                 <h3>{g.label}</h3>
-                <ul className="today-list">
-                  {g.items.map((i) => (
-                    <CanvasRow key={i.uid} item={i} canvas={canvas} onCelebrate={onCelebrate} />
-                  ))}
-                </ul>
+                <ul className="today-list">{g.rows.map(renderRow)}</ul>
               </div>
             ))}
           </section>
@@ -321,8 +415,15 @@ export function TodayPanel({
             {canvas.checkedAt && (
               <li>
                 <span className="time">{timeFmt.format(canvas.checkedAt)}</span> Checked Canvas:{" "}
-                {canvasDays.today.length + canvasDays.later.length} item
-                {canvasDays.today.length + canvasDays.later.length === 1 ? "" : "s"} in the next{" "}
+                {rows.filter((r) => r.kind === "canvas").length} item
+                {rows.filter((r) => r.kind === "canvas").length === 1 ? "" : "s"} in the next{" "}
+                {DAYS_AHEAD} days
+              </li>
+            )}
+            {calendar.checkedAt && (
+              <li>
+                <span className="time">{timeFmt.format(calendar.checkedAt)}</span> Checked calendar:{" "}
+                {calendar.events.length} event{calendar.events.length === 1 ? "" : "s"} in the next{" "}
                 {DAYS_AHEAD} days
               </li>
             )}
@@ -338,6 +439,7 @@ export function TodayPanel({
           <h2>Controls</h2>
           <ApiKeySettings />
           <CanvasSettings canvas={canvas} />
+          <CalendarSettings calendar={calendar} />
           <label className="toggle">
             <input type="checkbox" checked={muted} onChange={(e) => onMutedChange(e.target.checked)} />
             Mute voice
@@ -375,10 +477,12 @@ function CanvasRow({
   item,
   canvas,
   onCelebrate,
+  clash,
 }: {
   item: CanvasItem;
   canvas: CanvasState;
   onCelebrate: () => void;
+  clash: string;
 }) {
   const done = canvas.done.has(item.uid);
   return (
@@ -387,6 +491,7 @@ function CanvasRow({
       <span className="title">
         {item.title}
         <span className="source source-canvas">
+          {clash && <Clash note={clash} />}
           {canvasLabel(item)}
           {item.course ? ` · ${item.course}` : ""}
         </span>
@@ -408,5 +513,41 @@ function CanvasRow({
         )}
       </span>
     </li>
+  );
+}
+
+/** One event from the Mac's Calendar app. Read-only, so no actions. */
+function EventRow({
+  event,
+  calendarTitle,
+  clash,
+}: {
+  event: CalendarEvent;
+  calendarTitle: string;
+  clash: string;
+}) {
+  const until = eventUntil(event);
+  return (
+    <li>
+      <span className="time">{eventTime(event)}</span>
+      <span className="title">
+        {event.title}
+        <span className="source source-calendar">
+          {clash && <Clash note={clash} />}
+          {calendarTitle}
+          {until ? ` · ${until}` : ""}
+          {event.location ? ` · ${event.location}` : ""}
+        </span>
+      </span>
+      <span />
+    </li>
+  );
+}
+
+function Clash({ note }: { note: string }) {
+  return (
+    <span className="clash" title={note} aria-label={note}>
+      ⚠{" "}
+    </span>
   );
 }

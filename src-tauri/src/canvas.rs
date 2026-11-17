@@ -130,9 +130,31 @@ fn network_error(e: reqwest::Error) -> String {
 
 async fn fetch_items(url: &Url) -> Result<Vec<CanvasItem>, String> {
     let text = download(url).await?;
-    let items = parse_feed(&text, url.host_str().unwrap_or(""), Utc::now());
+    let now = Utc::now();
+    let (from, to) = ((now - KEEP_PAST).timestamp_millis(), (now + KEEP_AHEAD).timestamp_millis());
+    let items = parse_feed(&text, url.host_str().unwrap_or(""), from, to);
     eprintln!("[canvas] read {} upcoming item(s)", items.len());
     Ok(items)
+}
+
+/// Canvas items between two moments, as lines for Gemini. None when Canvas isn't connected.
+pub async fn lines_between(from_ms: i64, to_ms: i64) -> Result<Option<Vec<String>>, String> {
+    let Some(link) = saved_link().await? else {
+        return Ok(None);
+    };
+    let url = normalize(&link)?;
+    let text = download(&url).await?;
+    let items = parse_feed(&text, url.host_str().unwrap_or(""), from_ms, to_ms);
+    Ok(Some(
+        items
+            .iter()
+            .map(|i| {
+                let what = if i.kind == "assignment" { "Canvas assignment due" } else { "Canvas course event" };
+                let course = i.course.as_deref().map(|c| format!(" ({c})")).unwrap_or_default();
+                format!("- {} · {what} · {}{course}", crate::lookup::when(i.start_ms, None, i.all_day), i.title)
+            })
+            .collect(),
+    ))
 }
 
 // ---------- commands ----------
@@ -364,7 +386,7 @@ fn finish(ev: RawEvent, feed_host: &str) -> Option<CanvasItem> {
 }
 
 /// Reads every VEVENT and keeps the ones near `now`, sorted by time.
-fn parse_feed(text: &str, feed_host: &str, now: DateTime<Utc>) -> Vec<CanvasItem> {
+fn parse_feed(text: &str, feed_host: &str, from: i64, to: i64) -> Vec<CanvasItem> {
     let mut items = Vec::new();
     let mut current: Option<RawEvent> = None;
     // Depth of components nested inside an event (e.g. VALARM), whose fields we skip.
@@ -392,8 +414,6 @@ fn parse_feed(text: &str, feed_host: &str, now: DateTime<Utc>) -> Vec<CanvasItem
             }
         }
     }
-    let from = (now - KEEP_PAST).timestamp_millis();
-    let to = (now + KEEP_AHEAD).timestamp_millis();
     items.retain(|i| i.start_ms >= from && i.start_ms <= to);
     items.sort_by_key(|i| i.start_ms);
     items.dedup_by(|a, b| a.uid == b.uid && !a.uid.is_empty());
@@ -439,7 +459,12 @@ END:VCALENDAR\r\n";
     #[test]
     fn parses_canvas_feed() {
         let now = Utc.with_ymd_and_hms(2026, 11, 15, 12, 0, 0).unwrap();
-        let items = parse_feed(FEED, "school.instructure.com", now);
+        let items = parse_feed(
+            FEED,
+            "school.instructure.com",
+            (now - KEEP_PAST).timestamp_millis(),
+            (now + KEEP_AHEAD).timestamp_millis(),
+        );
         assert_eq!(items.len(), 3, "old item dropped");
 
         let a = &items[0];

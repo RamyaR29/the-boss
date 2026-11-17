@@ -1,6 +1,8 @@
+mod calendar;
 mod canvas;
 mod chat;
 mod keychain;
+mod lookup;
 mod memory;
 mod sessions;
 mod voice;
@@ -18,6 +20,10 @@ pub fn run() {
             keychain::has_api_key,
             keychain::save_api_key,
             keychain::delete_api_key,
+            calendar::calendar_status,
+            calendar::request_calendar_access,
+            calendar::fetch_calendar,
+            calendar::open_calendar_settings,
             canvas::save_canvas_feed,
             canvas::delete_canvas_feed,
             canvas::fetch_canvas,
