@@ -23,7 +23,7 @@ import { voiceFor } from "./language";
 import { useCalendar } from "./calendar";
 import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
 import { undoChange, useMemory } from "./memory";
-import { mockNeedsYou, type NeedsYouItem } from "./mockData";
+import type { NeedsYouItem } from "./needsYou";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
 import "./Elephant.css";
@@ -140,8 +140,7 @@ export default function App() {
     [canvas, now],
   );
 
-  const [mockNeeds, setMockNeeds] = useState(mockNeedsYou);
-  const needsYou = useMemo(() => [...canvasAlerts, ...mockNeeds], [canvasAlerts, mockNeeds]);
+  const needsYou = canvasAlerts;
   const resolveNeed = useCallback(
     (id: string, accepted: boolean) => {
       const alert = canvasAlerts.find((a) => a.id === id);
@@ -150,12 +149,9 @@ export default function App() {
         // "Open in Canvas" keeps the alert until you tick the item done or dismiss it.
         if (accepted && item?.url) openCanvasLink(item.url);
         else canvas.dismiss(alert.canvasUid);
-        return;
       }
-      setMockNeeds((items) => items.filter((i) => i.id !== id));
-      if (accepted) celebrate();
     },
-    [celebrate, canvas, canvasAlerts],
+    [canvas, canvasAlerts],
   );
   const [muted, setMuted] = usePref("boss.muted", false);
   const [quiet, setQuiet] = usePref("boss.quiet", false);

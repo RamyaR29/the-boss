@@ -26,13 +26,7 @@ import { detectLanguage } from "./language";
 import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
 import { CHARACTER_STATES, type CharacterState } from "./Elephant";
-import {
-  mockRecently,
-  mockToday,
-  sourceLabel,
-  type NeedsYouItem,
-  type TodayItem,
-} from "./mockData";
+import type { NeedsYouItem } from "./needsYou";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 const whenFmt = new Intl.DateTimeFormat(undefined, {
@@ -94,22 +88,10 @@ export function TodayPanel({
   memory,
   onUndoMemory,
 }: Props) {
-  const [today, setToday] = useState<(TodayItem & { done?: boolean })[]>(mockToday);
   const [ask, setAsk] = useState("");
   const [idea, setIdea] = useState("");
   const [parked, setParked] = useState<string[]>([]);
 
-  const markDone = (id: string) => {
-    const item = today.find((i) => i.id === id);
-    if (item && !item.done) onCelebrate();
-    setToday((items) => items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
-  };
-  const snooze = (id: string) =>
-    setToday((items) =>
-      items
-        .map((i) => (i.id === id ? { ...i, at: new Date(i.at.getTime() + 60 * 60 * 1000) } : i))
-        .sort((a, b) => a.at.getTime() - b.at.getTime()),
-    );
   const parkIdea = () => {
     if (!idea.trim()) return;
     setParked((p) => [idea.trim(), ...p]);
@@ -118,10 +100,9 @@ export function TodayPanel({
 
   const lang = detectLanguage(ask);
 
-  // Everything with a time, for today and the next 7 days: Canvas, Mac Calendar and the
-  // remaining mock reminders and to-dos. Today's go in Today; later days under "Coming up".
+  // Everything with a time, for today and the next 7 days: Canvas and the Mac Calendar.
+  // Today's go in Today; later days under "Coming up".
   type Row =
-    | { kind: "mock"; day: number; at: number; allDay: boolean; item: TodayItem & { done?: boolean } }
     | { kind: "canvas"; day: number; at: number; allDay: boolean; item: CanvasItem }
     | { kind: "event"; day: number; at: number; allDay: boolean; item: CalendarEvent };
   const now = new Date();
@@ -129,10 +110,6 @@ export function TodayPanel({
   const endDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + DAYS_AHEAD + 1).getTime();
   const dayOf = (ms: number) => startOfDay(new Date(ms)).getTime();
   const rows: Row[] = [
-    ...today.map((item): Row => {
-      const at = item.at.getTime();
-      return { kind: "mock", day: dayOf(at), at, allDay: false, item };
-    }),
     ...canvas.items.map(
       (item): Row => ({ kind: "canvas", day: dayOf(item.startMs), at: item.startMs, allDay: item.allDay, item }),
     ),
@@ -185,10 +162,6 @@ export function TodayPanel({
 
   // One line of context for Gemini.
   const rowLine = (r: Row, withDay: boolean) => {
-    if (r.kind === "mock") {
-      const t = r.item;
-      return `- ${timeFmt.format(t.at)} · ${sourceLabel[t.source]} (sample) · ${t.title}${t.done ? " (done)" : ""}`;
-    }
     const clash = clashNote(r.item.uid);
     const tail = clash ? ` (${clash})` : "";
     if (r.kind === "canvas") {
@@ -222,7 +195,6 @@ export function TodayPanel({
     } else {
       lines.push("- Mac Calendar isn't connected yet (the user can allow access under Controls).");
     }
-    lines.push("- Reminders and to-dos are sample data for now.");
     if (needsYou.length) {
       lines.push("", "Waiting on the user:");
       for (const n of needsYou) lines.push(`- ${n.text}`);
@@ -242,33 +214,13 @@ export function TodayPanel({
         />
       );
     }
-    if (r.kind === "event") {
-      return (
-        <EventRow
-          key={r.item.uid}
-          event={r.item}
-          calendarTitle={calendar.calendarTitle(r.item.calendarId)}
-          clash={clashNote(r.item.uid)}
-        />
-      );
-    }
-    const t = r.item;
     return (
-      <li key={t.id} className={t.done ? "done" : ""}>
-        <span className="time">{timeFmt.format(t.at)}</span>
-        <span className="title">
-          {t.title}
-          <span className={`source source-${t.source}`}>{sourceLabel[t.source]}</span>
-        </span>
-        <span className="row-actions">
-          <button title={t.done ? "Undo" : "Done"} onClick={() => markDone(t.id)}>
-            {t.done ? "↺" : "✓"}
-          </button>
-          <button title="Snooze 1 hour" onClick={() => snooze(t.id)} disabled={t.done}>
-            ⏰
-          </button>
-        </span>
-      </li>
+      <EventRow
+        key={r.item.uid}
+        event={r.item}
+        calendarTitle={calendar.calendarTitle(r.item.calendarId)}
+        clash={clashNote(r.item.uid)}
+      />
     );
   };
 
@@ -288,7 +240,6 @@ export function TodayPanel({
     <div className="panel" role="dialog" aria-label="Today">
       <header className="panel-header">
         <h1>Today</h1>
-        <span className="mock-tag" title="Canvas and Calendar are real; reminders and to-dos are sample data">mock: reminders, to-dos</span>
       </header>
 
       <div className="panel-scroll">
@@ -314,6 +265,7 @@ export function TodayPanel({
         <section>
           <h2>Today</h2>
           <ul className="today-list">{todayRows.map(renderRow)}</ul>
+          {todayRows.length === 0 && <p className="hint">Nothing on today.</p>}
           {canvas.connected === false && (
             <p className="hint">Connect Canvas under Controls to see your real deadlines.</p>
           )}
@@ -411,6 +363,7 @@ export function TodayPanel({
 
         <section>
           <h2>Recently</h2>
+          {!canvas.checkedAt && !calendar.checkedAt && <p className="hint">Nothing yet.</p>}
           <ul className="recent">
             {canvas.checkedAt && (
               <li>
@@ -427,11 +380,6 @@ export function TodayPanel({
                 {DAYS_AHEAD} days
               </li>
             )}
-            {mockRecently.map((r) => (
-              <li key={r.id}>
-                <span className="time">{timeFmt.format(r.at)}</span> {r.text}
-              </li>
-            ))}
           </ul>
         </section>
 

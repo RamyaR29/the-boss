@@ -185,23 +185,6 @@ export const canvasLabel = (i: CanvasItem) => (i.kind === "assignment" ? "Canvas
 /** The moment something is due: an all-day assignment counts until the end of its day. */
 export const dueMs = (i: CanvasItem) => (i.allDay ? addDays(new Date(i.startMs), 1).getTime() - 1 : i.startMs);
 
-/** Splits items into today and each of the next DAYS_AHEAD days. */
-export function splitByDay(items: CanvasItem[], now = new Date()) {
-  const today0 = startOfDay(now).getTime();
-  const tomorrow0 = addDays(now, 1).getTime();
-  const end = addDays(now, DAYS_AHEAD + 1).getTime();
-  const today = items.filter((i) => i.startMs >= today0 && i.startMs < tomorrow0);
-  const later = items.filter((i) => i.startMs >= tomorrow0 && i.startMs < end);
-  const groups: { label: string; items: CanvasItem[] }[] = [];
-  for (const i of later) {
-    const label = dayLabel(new Date(i.startMs), now);
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.items.push(i);
-    else groups.push({ label, items: [i] });
-  }
-  return { today, later, groups };
-}
-
 /** Assignments due within the next 24 hours that aren't ticked or dismissed. */
 export function dueSoon(c: CanvasState, now: number) {
   return c.items.filter(
