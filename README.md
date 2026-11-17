@@ -2,7 +2,7 @@
 
 A personal AI assistant that lives on the Mac as a small, clever elephant with round gold glasses and a tiny coral backpack. It takes instructions in English, Tamil or Tanglish, watches mail, calendar, reminders and Canvas, and speaks up when something needs attention.
 
-> Status: early V1. The elephant, the Today panel, real Canvas deadlines and Mac Calendar events, typed chat, spoken replies and local memory work. Proactive alerts, reminders and mail come next.
+> Status: early V1. The elephant, the Today panel, real Canvas deadlines and Mac Calendar events, typed chat, spoken replies and local memory work. Reminders and mail come next.
 
 ## What works today
 
@@ -88,7 +88,7 @@ Every capability falls into one of three buckets:
 
 ## Roadmap
 
-- **V1:** ~~character window~~, ~~Today panel~~, ~~typed chat in English, Tamil and Tanglish~~, ~~badge~~, ~~right-click menu~~, ~~real read-only Canvas~~, ~~real read-only calendar~~, proactive alerts, ~~local memory~~.
+- **V1:** ~~character window~~, ~~Today panel~~, ~~typed chat in English, Tamil and Tanglish~~, ~~badge~~, ~~right-click menu~~, ~~real read-only Canvas~~, ~~real read-only calendar~~, ~~local memory~~. (Proactive alerts, where the elephant speaks up on its own, were dropped.)
 - **V2:** reminders, to-do tools and idea parking (with confirmation), mail checking, message drafting with hand-off, voice input, ~~spoken replies~~ (done early).
 - **V3:** plug in other apps through the Boss App Contract (MCP), smarter suggestions, daily digest, optional Android companion.
 
