@@ -24,6 +24,14 @@ import { useCalendar } from "./calendar";
 import { dayLabel, dueSoon, itemTime, openCanvasLink, useCanvas } from "./canvas";
 import { undoChange, useMemory } from "./memory";
 import type { NeedsYouItem } from "./needsYou";
+import {
+  deleteReminder,
+  dueText,
+  isOverdue,
+  undoReminderChange,
+  useReminders,
+  type Reminder,
+} from "./reminders";
 import { TodayPanel } from "./TodayPanel";
 import "./App.css";
 import "./Elephant.css";
@@ -119,6 +127,15 @@ export default function App() {
     if (open) refreshCalendar();
   }, [open, refreshCalendar]);
 
+  // Reminders and to-dos from the Mac's Reminders app, refreshed like the calendar.
+  const reminders = useReminders();
+  const refreshReminders = reminders.refresh;
+  useEffect(() => {
+    if (open) refreshReminders();
+  }, [open, refreshReminders]);
+  // Deletes chat asked for, waiting for the user's yes in Needs you.
+  const [pendingDeletes, setPendingDeletes] = useState<Reminder[]>([]);
+
   // Real Canvas deadlines, refreshed hourly even while the panel is closed.
   const canvas = useCanvas();
   // A clock that ticks every minute, so deadlines move into the 24-hour alert window on time.
@@ -140,9 +157,53 @@ export default function App() {
     [canvas, now],
   );
 
-  const needsYou = canvasAlerts;
+  const reminderCards = useMemo<NeedsYouItem[]>(
+    () => [
+      ...pendingDeletes.map(
+        (r): NeedsYouItem => ({
+          id: `rdelete:${r.id}`,
+          kind: "approval",
+          text: `Delete the reminder "${r.title}" (${dueText(r)}) from the Reminders app?`,
+          primary: "Delete",
+          secondary: "Keep",
+        }),
+      ),
+      ...reminders.items
+        .filter((r) => isOverdue(r, now) && !reminders.isDismissed(r))
+        .map(
+          (r): NeedsYouItem => ({
+            id: `roverdue:${r.id}`,
+            kind: "alert",
+            text: `Overdue: "${r.title}" was due ${dueText(r)}.`,
+            primary: "Mark done",
+            secondary: "Dismiss",
+          }),
+        ),
+    ],
+    [pendingDeletes, reminders, now],
+  );
+
+  const needsYou = useMemo(() => [...reminderCards, ...canvasAlerts], [reminderCards, canvasAlerts]);
   const resolveNeed = useCallback(
-    (id: string, accepted: boolean) => {
+    async (id: string, accepted: boolean) => {
+      if (id.startsWith("rdelete:")) {
+        const r = pendingDeletes.find((p) => `rdelete:${p.id}` === id);
+        setPendingDeletes((p) => p.filter((x) => `rdelete:${x.id}` !== id));
+        if (r && accepted) {
+          await deleteReminder(r.id).catch((e) => console.error("Delete failed:", e));
+          await reminders.refresh();
+        }
+        return;
+      }
+      if (id.startsWith("roverdue:")) {
+        const r = reminders.items.find((x) => `roverdue:${x.id}` === id);
+        if (!r) return;
+        if (accepted) {
+          celebrate();
+          await reminders.toggleDone(r);
+        } else reminders.dismiss(r);
+        return;
+      }
       const alert = canvasAlerts.find((a) => a.id === id);
       if (alert?.canvasUid) {
         const item = canvas.items.find((i) => i.uid === alert.canvasUid);
@@ -151,7 +212,7 @@ export default function App() {
         else canvas.dismiss(alert.canvasUid);
       }
     },
-    [canvas, canvasAlerts],
+    [canvas, canvasAlerts, pendingDeletes, reminders, celebrate],
   );
   const [muted, setMuted] = usePref("boss.muted", false);
   const [quiet, setQuiet] = usePref("boss.quiet", false);
@@ -255,9 +316,28 @@ export default function App() {
         if (stateRef.current === "talking") flash("happy", 1800);
       };
       try {
-        const { text: reply, memory: changes } = await askBoss(withUser, context, [...calendar.hidden]);
-        add({ role: "model", text: reply, ...(changes.length ? { memory: changes } : {}) });
+        const {
+          text: reply,
+          memory: changes,
+          reminders: reminderChanges,
+        } = await askBoss(withUser, context, [...calendar.hidden], [...reminders.hidden]);
+        add({
+          role: "model",
+          text: reply,
+          ...(changes.length ? { memory: changes } : {}),
+          ...(reminderChanges.length ? { reminders: reminderChanges } : {}),
+        });
         if (changes.length) memory.reload();
+        if (reminderChanges.length) {
+          const deletes = reminderChanges.filter((c) => c.kind === "confirmDelete" && c.item);
+          if (deletes.length) {
+            setPendingDeletes((p) => [
+              ...p,
+              ...deletes.map((c) => c.item!).filter((r) => !p.some((x) => x.id === r.id)),
+            ]);
+          }
+          reminders.refresh();
+        }
         if (!quiet) setBubble(reply);
         setState("talking");
         if (silent) {
@@ -278,10 +358,29 @@ export default function App() {
         lastActivity.current = Date.now();
       }
     },
-    [session, quiet, silent, touch, flash, memory, calendar.hidden],
+    [session, quiet, silent, touch, flash, memory, calendar.hidden, reminders],
   );
 
   /** Undo one memory change shown under a reply, and mark it undone in the chat. */
+  /** Undo one reminder change shown under a reply, and mark it undone in the chat. */
+  const undoReminder = useCallback(
+    async (messageId: number, index: number) => {
+      const change = session.messages.find((m) => m.id === messageId)?.reminders?.[index];
+      if (!change || change.undone) return;
+      await undoReminderChange(change);
+      await reminders.refresh();
+      setSession((s) => ({
+        ...s,
+        messages: s.messages.map((m) =>
+          m.id === messageId && m.reminders
+            ? { ...m, reminders: m.reminders.map((c, i) => (i === index ? { ...c, undone: true } : c)) }
+            : m,
+        ),
+      }));
+    },
+    [session, reminders],
+  );
+
   const undoMemory = useCallback(
     async (messageId: number, index: number) => {
       const change = session.messages.find((m) => m.id === messageId)?.memory?.[index];
@@ -439,8 +538,10 @@ export default function App() {
           onResolve={resolveNeed}
           canvas={canvas}
           calendar={calendar}
+          reminders={reminders}
           memory={memory}
           onUndoMemory={undoMemory}
+          onUndoReminder={undoReminder}
           muted={muted}
           onMutedChange={setMuted}
           quiet={quiet}

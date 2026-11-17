@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { MemoryChange } from "./memory";
+import type { ReminderChange } from "./reminders";
 
 export interface ChatMessage {
   id: number;
@@ -9,6 +10,8 @@ export interface ChatMessage {
   error?: boolean;
   /** Memory changes that came with this reply. */
   memory?: MemoryChange[];
+  /** Reminder changes that came with this reply. */
+  reminders?: ReminderChange[];
 }
 
 /** How many earlier messages to send with each question. */
@@ -17,6 +20,7 @@ const HISTORY_LIMIT = 12;
 export interface AskReply {
   text: string;
   memory: MemoryChange[];
+  reminders: ReminderChange[];
 }
 
 export async function askBoss(
@@ -24,12 +28,14 @@ export async function askBoss(
   context: string,
   /** Calendars the user hid; chat lookups skip them too. */
   hiddenCalendars: string[] = [],
+  /** Reminders lists the user hid. */
+  hiddenLists: string[] = [],
 ): Promise<AskReply> {
   const history = messages
     .filter((m) => !m.error)
     .slice(-HISTORY_LIMIT)
     .map(({ role, text }) => ({ role, text }));
-  return invoke<AskReply>("ask", { history, context, hiddenCalendars });
+  return invoke<AskReply>("ask", { history, context, hiddenCalendars, hiddenLists });
 }
 
 // ---------- sessions (saved as local files by the Rust side) ----------

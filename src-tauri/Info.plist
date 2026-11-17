@@ -6,5 +6,9 @@
   <string>The Boss reads your calendar events (read-only) to show them in Today and answer questions about your schedule.</string>
   <key>NSCalendarsUsageDescription</key>
   <string>The Boss reads your calendar events (read-only) to show them in Today and answer questions about your schedule.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>The Boss shows your reminders and to-dos in Today and adds, completes or reschedules them when you ask.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>The Boss shows your reminders and to-dos in Today and adds, completes or reschedules them when you ask.</string>
 </dict>
 </plist>

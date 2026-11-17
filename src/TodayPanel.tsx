@@ -7,7 +7,7 @@ import {
   type CalendarEvent,
   type CalendarState,
 } from "./calendar";
-import { CalendarSettings } from "./CalendarSettings";
+import { AccessSettings } from "./AccessSettings";
 import {
   canvasLabel,
   DAYS_AHEAD,
@@ -27,6 +27,14 @@ import { PastChats } from "./PastChats";
 import type { ChatMessage } from "./chat";
 import { CHARACTER_STATES, type CharacterState } from "./Elephant";
 import type { NeedsYouItem } from "./needsYou";
+import {
+  dueText,
+  isOverdue,
+  reminderChangeLabel,
+  reminderTime,
+  type Reminder,
+  type RemindersState,
+} from "./reminders";
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 const whenFmt = new Intl.DateTimeFormat(undefined, {
@@ -64,8 +72,10 @@ interface Props {
   onQuietChange: (v: boolean) => void;
   canvas: CanvasState;
   calendar: CalendarState;
+  reminders: RemindersState;
   memory: MemoryState;
   onUndoMemory: (messageId: number, index: number) => Promise<void>;
+  onUndoReminder: (messageId: number, index: number) => Promise<void>;
 }
 
 export function TodayPanel({
@@ -85,8 +95,10 @@ export function TodayPanel({
   onQuietChange,
   canvas,
   calendar,
+  reminders,
   memory,
   onUndoMemory,
+  onUndoReminder,
 }: Props) {
   const [ask, setAsk] = useState("");
   const [idea, setIdea] = useState("");
@@ -100,11 +112,12 @@ export function TodayPanel({
 
   const lang = detectLanguage(ask);
 
-  // Everything with a time, for today and the next 7 days: Canvas and the Mac Calendar.
-  // Today's go in Today; later days under "Coming up".
+  // Everything with a time, for today and the next 7 days: Canvas, the Mac Calendar and
+  // dated reminders. Today's (and overdue reminders) go in Today; later days under "Coming up".
   type Row =
     | { kind: "canvas"; day: number; at: number; allDay: boolean; item: CanvasItem }
-    | { kind: "event"; day: number; at: number; allDay: boolean; item: CalendarEvent };
+    | { kind: "event"; day: number; at: number; allDay: boolean; item: CalendarEvent }
+    | { kind: "reminder"; day: number; at: number; allDay: boolean; item: Reminder };
   const now = new Date();
   const today0 = startOfDay(now).getTime();
   const endDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + DAYS_AHEAD + 1).getTime();
@@ -124,11 +137,19 @@ export function TodayPanel({
         item,
       };
     }),
+    ...reminders.items
+      .filter((r) => r.dueMs !== null)
+      .map((item): Row => {
+        const at = item.dueMs!;
+        // Overdue reminders stay in Today until they're done or moved.
+        return { kind: "reminder", day: at < today0 ? today0 : dayOf(at), at, allDay: item.allDay, item };
+      }),
   ]
     .filter((r) => r.day >= today0 && r.day < endDay)
     // By day, all-day items first, then by time.
     .sort((a, b) => a.day - b.day || Number(b.allDay) - Number(a.allDay) || a.at - b.at);
   const todayRows = rows.filter((r) => r.day === today0);
+  const todos = reminders.items.filter((r) => r.dueMs === null);
   const laterRows = rows.filter((r) => r.day > today0);
   const groups: { label: string; rows: Row[] }[] = [];
   for (const r of laterRows) {
@@ -161,7 +182,14 @@ export function TodayPanel({
   };
 
   // One line of context for Gemini.
+  const reminderLine = (r: Reminder) =>
+    `Reminder (${r.listTitle}) [${r.id}] · ${r.title}` +
+    `${r.completed ? " (done)" : isOverdue(r, now.getTime()) ? " (overdue)" : ""}`;
   const rowLine = (r: Row, withDay: boolean) => {
+    if (r.kind === "reminder") {
+      const when = withDay || r.at < today0 ? dueText(r.item) : reminderTime(r.item);
+      return `- ${when} · ${reminderLine(r.item)}`;
+    }
     const clash = clashNote(r.item.uid);
     const tail = clash ? ` (${clash})` : "";
     if (r.kind === "canvas") {
@@ -182,6 +210,10 @@ export function TodayPanel({
     lines.push("", `The next ${DAYS_AHEAD} days after today:`);
     for (const r of laterRows) lines.push(rowLine(r, true));
     if (laterRows.length === 0) lines.push("- Nothing.");
+    lines.push("", "To-dos (no date):");
+    for (const r of todos.slice(0, 100)) lines.push(`- ${reminderLine(r)}`);
+    if (todos.length === 0) lines.push("- None.");
+    if (todos.length > 100) lines.push(`- (${todos.length - 100} more not shown)`);
     lines.push("", "Sources:");
     if (canvas.connected === false) {
       lines.push("- Canvas isn't connected yet (the user can add the feed link under Controls).");
@@ -195,6 +227,19 @@ export function TodayPanel({
     } else {
       lines.push("- Mac Calendar isn't connected yet (the user can allow access under Controls).");
     }
+    if (reminders.access === "granted") {
+      const defaultList = reminders.lists.find((l) => l.id === reminders.defaultListId)?.title;
+      lines.push(
+        `- Reminders: real; lists: ${reminders.lists
+          .filter((l) => !reminders.hidden.has(l.id))
+          .map((l) => l.title)
+          .join(", ")}${defaultList ? `; new ones go to "${defaultList}" unless the user names a list` : ""}.`,
+      );
+    } else {
+      lines.push(
+        "- Reminders aren't connected yet, so you can't create or read reminders (the user can allow access under Controls).",
+      );
+    }
     if (needsYou.length) {
       lines.push("", "Waiting on the user:");
       for (const n of needsYou) lines.push(`- ${n.text}`);
@@ -203,6 +248,9 @@ export function TodayPanel({
   };
 
   const renderRow = (r: Row) => {
+    if (r.kind === "reminder") {
+      return <ReminderRow key={r.item.id} item={r.item} reminders={reminders} onCelebrate={onCelebrate} />;
+    }
     if (r.kind === "canvas") {
       return (
         <CanvasRow
@@ -264,13 +312,16 @@ export function TodayPanel({
 
         <section>
           <h2>Today</h2>
-          <ul className="today-list">{todayRows.map(renderRow)}</ul>
+          <ul className="today-list">{todayRows.map((r) => renderRow(r))}</ul>
           {todayRows.length === 0 && <p className="hint">Nothing on today.</p>}
           {canvas.connected === false && (
             <p className="hint">Connect Canvas under Controls to see your real deadlines.</p>
           )}
           {calendar.access !== null && calendar.access !== "granted" && (
             <p className="hint">Allow calendar access under Controls to see your real events.</p>
+          )}
+          {reminders.access !== null && reminders.access !== "granted" && (
+            <p className="hint">Allow Reminders access under Controls to see your reminders and to-dos.</p>
           )}
         </section>
 
@@ -280,9 +331,22 @@ export function TodayPanel({
             {groups.map((g) => (
               <div key={g.label} className="day-group">
                 <h3>{g.label}</h3>
-                <ul className="today-list">{g.rows.map(renderRow)}</ul>
+                <ul className="today-list">{g.rows.map((r) => renderRow(r))}</ul>
               </div>
             ))}
+          </section>
+        )}
+
+        {todos.length > 0 && (
+          <section>
+            <h2>
+              To-dos <span className="muted-count">{todos.filter((t) => !t.completed).length}</span>
+            </h2>
+            <ul className="today-list todo-list">
+              {todos.map((t) => (
+                <ReminderRow key={t.id} item={t} reminders={reminders} onCelebrate={onCelebrate} />
+              ))}
+            </ul>
           </section>
         )}
 
@@ -308,6 +372,20 @@ export function TodayPanel({
                         <button
                           className="link"
                           onClick={() => onUndoMemory(m.id, i).catch((e) => console.error(e))}
+                        >
+                          Undo
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {m.reminders?.map((c, i) => (
+                    <div key={`r${i}`} className={`memory-note${c.undone ? " undone" : ""}`}>
+                      🔔 {c.undone ? "Undone: " : ""}
+                      {reminderChangeLabel(c)}
+                      {c.kind !== "skipped" && c.kind !== "confirmDelete" && !c.undone && (
+                        <button
+                          className="link"
+                          onClick={() => onUndoReminder(m.id, i).catch((e) => console.error(e))}
                         >
                           Undo
                         </button>
@@ -387,7 +465,36 @@ export function TodayPanel({
           <h2>Controls</h2>
           <ApiKeySettings />
           <CanvasSettings canvas={canvas} />
-          <CalendarSettings calendar={calendar} />
+          <AccessSettings
+            label="Mac Calendar"
+            noun="calendars"
+            pane="Calendars"
+            hint="Read-only: The Boss never adds, changes or deletes events."
+            access={calendar.access}
+            groups={calendar.calendars}
+            hidden={calendar.hidden}
+            toggleHidden={calendar.toggleHidden}
+            checkedAt={calendar.checkedAt}
+            error={calendar.error}
+            requestAccess={calendar.requestAccess}
+            openSettings={calendar.openSettings}
+            refresh={calendar.refresh}
+          />
+          <AccessSettings
+            label="Reminders"
+            noun="lists"
+            pane="Reminders"
+            hint="The Boss can add, complete and move reminders when you ask. It deletes one only after you confirm."
+            access={reminders.access}
+            groups={reminders.lists}
+            hidden={reminders.hidden}
+            toggleHidden={reminders.toggleHidden}
+            checkedAt={reminders.checkedAt}
+            error={reminders.error}
+            requestAccess={reminders.requestAccess}
+            openSettings={reminders.openSettings}
+            refresh={reminders.refresh}
+          />
           <label className="toggle">
             <input type="checkbox" checked={muted} onChange={(e) => onMutedChange(e.target.checked)} />
             Mute voice
@@ -497,5 +604,49 @@ function Clash({ note }: { note: string }) {
     <span className="clash" title={note} aria-label={note}>
       ⚠{" "}
     </span>
+  );
+}
+
+/** A reminder or to-do. ✓ marks it done in the Reminders app; ⏰ moves it an hour (a day if all-day). */
+function ReminderRow({
+  item,
+  reminders,
+  onCelebrate,
+}: {
+  item: Reminder;
+  reminders: RemindersState;
+  onCelebrate: () => void;
+}) {
+  const overdue = isOverdue(item, Date.now());
+  return (
+    <li className={item.completed ? "done" : ""}>
+      <span className={`time${overdue ? " overdue" : ""}`}>{reminderTime(item)}</span>
+      <span className="title">
+        {item.title}
+        <span className={`source source-reminder${overdue ? " overdue" : ""}`}>
+          {overdue ? `Overdue, was due ${dueText(item)}` : item.dueMs === null ? "To-do" : "Reminder"} ·{" "}
+          {item.listTitle}
+        </span>
+      </span>
+      <span className="row-actions">
+        <button
+          title={item.completed ? "Undo" : "Done"}
+          onClick={() => {
+            if (!item.completed) onCelebrate();
+            reminders.toggleDone(item);
+          }}
+        >
+          {item.completed ? "↺" : "✓"}
+        </button>
+        {item.dueMs !== null && !item.completed && (
+          <button
+            title={item.allDay ? "Move to the next day" : "Snooze 1 hour"}
+            onClick={() => reminders.snooze(item)}
+          >
+            ⏰
+          </button>
+        )}
+      </span>
+    </li>
   );
 }

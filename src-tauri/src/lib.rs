@@ -4,6 +4,7 @@ mod chat;
 mod keychain;
 mod lookup;
 mod memory;
+mod reminders;
 mod sessions;
 mod voice;
 
@@ -35,6 +36,14 @@ pub fn run() {
             memory::delete_memory,
             memory::restore_memory,
             memory::clear_memories,
+            reminders::reminders_status,
+            reminders::request_reminders_access,
+            reminders::fetch_reminders,
+            reminders::complete_reminder,
+            reminders::set_reminder_due,
+            reminders::delete_reminder,
+            reminders::restore_reminder,
+            reminders::open_reminders_settings,
             sessions::save_session,
             sessions::load_session,
             sessions::list_sessions,

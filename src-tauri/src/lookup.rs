@@ -1,5 +1,5 @@
 //! Lets chat look further than the panel's 7 days: when Gemini needs another
-//! date range, The Boss reads that range from the Mac Calendar and Canvas and
+//! date range, The Boss reads that range from the Mac Calendar, Canvas and Reminders and
 //! sends it back as data.
 
 use chrono::{Local, NaiveDate, TimeZone};
@@ -30,7 +30,7 @@ fn local_midnight(d: NaiveDate) -> Option<i64> {
 
 /// Reads calendar events and Canvas items from `from` to `to` (inclusive, YYYY-MM-DD)
 /// and returns them as text for Gemini.
-pub async fn run(from: &str, to: &str, hidden: Vec<String>) -> String {
+pub async fn run(from: &str, to: &str, hidden: Vec<String>, hidden_lists: Vec<String>) -> String {
     let (Ok(start), Ok(end)) = (
         NaiveDate::parse_from_str(from.trim(), "%Y-%m-%d"),
         NaiveDate::parse_from_str(to.trim(), "%Y-%m-%d"),
@@ -72,5 +72,10 @@ pub async fn run(from: &str, to: &str, hidden: Vec<String>) -> String {
         "Calendar access isn't allowed yet.",
     );
     section("Canvas", crate::canvas::lines_between(from_ms, to_ms).await, "Canvas isn't connected yet.");
+    section(
+        "Reminders (open, with a due date in this range)",
+        crate::reminders::lines_between(from_ms, to_ms, hidden_lists).await,
+        "Reminders access isn't allowed yet.",
+    );
     out.join("\n")
 }

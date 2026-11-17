@@ -301,3 +301,6 @@ input[type="text"],
 .btn-danger { background: var(--alert); color: #fff; border-color: transparent; }
 section > button.link { margin-top: 8px; }
 .clash { color: var(--alert); cursor: help; }
+.source-reminder { color: var(--accent); }
+.overdue { color: var(--alert) !important; }
+.muted-count { font-weight: normal; }
